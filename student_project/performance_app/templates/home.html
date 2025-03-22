@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Performance Prediction System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row align-items-center g-5">
+        <div class="col-lg-6">
+            <h1 class="display-5 fw-bold mb-4">Student Performance Prediction System</h1>
+            <p class="fs-4 mb-4">
+                A web-based platform combining machine learning techniques with educational data analysis to enhance student success.
+            </p>
+            <p class="fs-5 mb-4">
+                Our system addresses the critical challenge faced by educators in identifying struggling students early enough for effective intervention. By analyzing key indicators such as grades, attendance, and study habits, we provide timely insights for both teachers and students.
+            </p>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+                {% if user.is_authenticated %}
+                    <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg px-4 me-md-2">Go to Dashboard</a>
+                {% else %}
+                    <a href="{% url 'login' %}" class="btn btn-primary btn-lg px-4 me-md-2">Sign In</a>
+                    <a href="{% url 'register' %}" class="btn btn-outline-secondary btn-lg px-4">Register</a>
+                {% endif %}
+                <a href="{% url 'about' %}" class="btn btn-outline-info btn-lg px-4">Learn More</a>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-lg">
+                <div class="card-body p-5">
+                    <h2 class="card-title mb-4">Key Features</h2>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="h-100 p-3 bg-light rounded-3">
+                                <h4>For Teachers</h4>
+                                <ul>
+                                    <li>Input student data</li>
+                                    <li>Class-level insights</li>
+                                    <li>Identify at-risk students</li>
+                                    <li>Performance reports</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="h-100 p-3 bg-light rounded-3">
+                                <h4>For Students</h4>
+                                <ul>
+                                    <li>Performance predictions</li>
+                                    <li>Personalized recommendations</li>
+                                    <li>Track progress</li>
+                                    <li>Set academic goals</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

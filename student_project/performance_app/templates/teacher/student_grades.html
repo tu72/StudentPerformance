@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+{% block title %}Student Grades - Teacher Dashboard{% endblock %}
+{% block page_title %}Student Grades{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-grades {
+        font-size: 0.9rem;
+    }
+    .table-grades th, .table-grades td {
+        vertical-align: middle;
+        text-align: center;
+    }
+    .input-grade, .input-attendance {
+        width: 60px;
+        text-align: center;
+    }
+    .level-divider {
+        background-color: #f0f0f0;
+        font-weight: bold;
+    }
+    .sticky-first-col {
+        position: sticky;
+        left: 0;
+        background-color: white;
+        z-index: 1;
+        border-right: 2px solid #dee2e6;
+    }
+    .grade-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .attendance-label {
+        font-size: 0.7rem;
+        color: #6c757d;
+    }
+    /* Checkbox column styling */
+    .checkbox-col {
+        width: 40px;
+        text-align: center;
+    }
+    .student-checkbox {
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+    }
+    .select-all-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .select-all-container label {
+        margin-left: 5px;
+        margin-bottom: 0;
+        cursor: pointer;
+    }
+    /* Tab styling */
+    .nav-tabs .nav-link {
+        font-weight: 500;
+    }
+    .nav-tabs .nav-link.active {
+        font-weight: 600;
+        border-top: 3px solid #0d6efd;
+    }
+    /* Read-only style for form inputs */
+    .readonly-input {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+        opacity: 0.8;
+    }
+    /* Cell styling for unavailable courses */
+    .cell-na {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <!-- Level Tabs -->
+                    <ul class="nav nav-tabs card-header-tabs" id="levelTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link {% if active_tab == 'level1' %}active{% endif %}" 
+                               id="level1-tab" 
+                               href="?tab=level1" 
+                               role="tab" 
+                               aria-controls="level1" 
+                               aria-selected="{% if active_tab == 'level1' %}true{% else %}false{% endif %}">
+                                Level 1 Students
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link {% if active_tab == 'level2' %}active{% endif %}" 
+                               id="level2-tab" 
+                               href="?tab=level2" 
+                               role="tab" 
+                               aria-controls="level2" 
+                               aria-selected="{% if active_tab == 'level2' %}true{% else %}false{% endif %}">
+                                Level 2 Students
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <!-- Tab content -->
+                    <div class="tab-content" id="levelTabsContent">
+                        <!-- Level 1 tab content, only shown when level 1 tab is active -->
+                        {% if active_tab == 'level1' %}
+                        <div class="tab-pane fade show active" id="level1" role="tabpanel" aria-labelledby="level1-tab">
+                            <!-- Promotion form -->
+                            <form id="promotionForm" method="post" action="{% url 'promote_selected_students' %}">
+                                {% csrf_token %}
+                                <div class="select-all-container mb-3">
+                                    <input type="checkbox" id="selectAllStudents" class="student-checkbox">
+                                    <label for="selectAllStudents">Select All Level 1 Students</label>
+                                </div>
+                                
+                                <!-- Promotion button -->
+                                <div class="d-grid gap-2 d-md-flex mb-4">
+                                    <button type="submit" class="btn btn-warning" id="promoteButton">
+                                        <i data-feather="arrow-up-circle"></i> Promote Selected Students
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        {% else %}
+                        <!-- Level 2 tab content -->
+                        <div class="tab-pane fade show active" id="level2" role="tabpanel" aria-labelledby="level2-tab">
+                            <div class="alert alert-info">
+                                These students are already at the highest level.
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                
+                    <!-- Grades form -->
+                    <form id="gradesForm" method="post">
+                        {% csrf_token %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover table-grades">
+                                <thead class="table-light">
+                                    <tr>
+                                        {% if active_tab == 'level1' %}
+                                        <th class="checkbox-col" rowspan="2">
+                                            <!-- Header column for checkboxes -->
+                                        </th>
+                                        {% endif %}
+                                        <th class="sticky-first-col" rowspan="2">Student ID</th>
+                                        <th class="sticky-first-col" rowspan="2">Student Name</th>
+                                        
+                                        {% for level, level_courses in course_levels.items %}
+                                            <!-- Only show course level headers relevant to the current tab -->
+                                            {% if active_tab == 'level1' and level == 1 or active_tab == 'level2' %}
+                                            <th class="level-divider" colspan="{{ level_courses|length }}">
+                                                Level {{ level }} Courses
+                                            </th>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                    <tr>
+                                        {% for course in courses %}
+                                            <!-- Only show course headers relevant to the current tab -->
+                                            {% if active_tab == 'level1' and course.level == 1 or active_tab == 'level2' %}
+                                            <th>{{ course.name }}<br>({{ course.code }})</th>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for student in students %}
+                                        <!-- Only show students from the appropriate level for the active tab -->
+                                        {% if active_tab == 'level1' and student.level == 1 or active_tab == 'level2' and student.level == 2 %}
+                                        <tr>
+                                            {% if active_tab == 'level1' %}
+                                            <td class="checkbox-col">
+                                                <!-- Only show checkboxes for level 1 students -->
+                                                <input type="checkbox" 
+                                                       class="student-checkbox" 
+                                                       name="student_ids" 
+                                                       value="{{ student.id }}" 
+                                                       form="promotionForm">
+                                            </td>
+                                            {% endif %}
+                                            <td class="sticky-first-col">{{ student.student_id }}</td>
+                                            <td class="sticky-first-col">
+                                                {{ student.name }}
+                                                <span class="badge bg-primary">Level {{ student.level }}</span>
+                                            </td>
+                                            
+                                            {% for course in courses %}
+                                                <!-- Only show course cells relevant to the current tab -->
+                                                {% if active_tab == 'level1' and course.level == 1 or active_tab == 'level2' %}
+                                                    <td>
+                                                        <div class="grade-container">
+                                                            {% if student.level == course.level %}
+                                                                <!-- Editable fields when course level matches student level -->
+                                                                <input type="number" 
+                                                                       class="form-control form-control-sm input-grade" 
+                                                                       name="grade_{{ student.id }}_{{ course.id }}" 
+                                                                       value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'grade'|default:'' }}"
+                                                                       min="0" max="100" step="0.1">
+                                                                <span class="attendance-label">Attendance %</span>
+                                                                <input type="number" 
+                                                                       class="form-control form-control-sm input-attendance" 
+                                                                       name="attendance_{{ student.id }}_{{ course.id }}" 
+                                                                       value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'attendance'|default:'' }}"
+                                                                       min="0" max="100" step="0.1">
+                                                            {% else %}
+                                                                <!-- Non-editable text for level 1 courses shown to level 2 students -->
+                                                                <p class="mb-0 fw-bold">
+                                                                    {{ grades_data|get_item:student.id|get_item:course.id|get_item:'grade'|default:'-' }}
+                                                                </p>
+                                                                <span class="attendance-label">Attendance %</span>
+                                                                <p class="mb-0 text-muted">
+                                                                    {{ grades_data|get_item:student.id|get_item:course.id|get_item:'attendance'|default:'-' }}
+                                                                </p>
+                                                                <!-- Hidden inputs to preserve data during form submission -->
+                                                                <input type="hidden" 
+                                                                       name="grade_{{ student.id }}_{{ course.id }}" 
+                                                                       value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'grade'|default:'' }}">
+                                                                <input type="hidden" 
+                                                                       name="attendance_{{ student.id }}_{{ course.id }}" 
+                                                                       value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'attendance'|default:'' }}">
+                                                            {% endif %}
+                                                        </div>
+                                                    </td>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <button type="submit" class="btn btn-primary">Save All Grades</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add input validation for grades and attendance
+        const gradeInputs = document.querySelectorAll('.input-grade:not([readonly]), .input-attendance:not([readonly])');
+        gradeInputs.forEach(input => {
+            input.addEventListener('input', function() {
+                const value = parseFloat(this.value);
+                if (value < 0) this.value = 0;
+                if (value > 100) this.value = 100;
+            });
+        });
+        
+        // Select all functionality for level 1 students
+        const selectAllCheckbox = document.getElementById('selectAllStudents');
+        if (selectAllCheckbox) {
+            const studentCheckboxes = document.querySelectorAll('input[name="student_ids"]');
+            const promoteButton = document.getElementById('promoteButton');
+            
+            // Update promote button state
+            function updatePromoteButtonState() {
+                const anySelected = Array.from(studentCheckboxes).some(checkbox => checkbox.checked);
+                promoteButton.disabled = !anySelected;
+            }
+            
+            // Select all checkbox functionality
+            selectAllCheckbox.addEventListener('change', function() {
+                studentCheckboxes.forEach(checkbox => {
+                    checkbox.checked = selectAllCheckbox.checked;
+                });
+                updatePromoteButtonState();
+            });
+            
+            // Individual checkboxes event listeners
+            studentCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const allChecked = Array.from(studentCheckboxes).every(cb => cb.checked);
+                    selectAllCheckbox.checked = allChecked;
+                    updatePromoteButtonState();
+                });
+            });
+            
+            // Initialize button state
+            updatePromoteButtonState();
+        }
+        
+        // Initialize Feather icons if available
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+    });
+</script>
+{% endblock %}

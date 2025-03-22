@@ -1,0 +1,34 @@
+from django.urls import path
+from django.contrib.auth import views as auth_views
+from . import views
+
+urlpatterns = [
+    # Basic pages
+    path('', views.home, name='home'),
+    path('about/', views.about, name='about'),
+    
+    # Authentication
+    path('register/', views.register, name='register'),
+    path('login/', auth_views.LoginView.as_view(template_name='login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(template_name='logout.html'), name='logout'),
+    
+    # Dashboard
+    path('dashboard/', views.dashboard, name='dashboard'),
+    path('teacher/dashboard/', views.teacher_dashboard, name='teacher_dashboard'),
+    path('student/dashboard/', views.student_dashboard, name='student_dashboard'),
+    
+    # Course management
+path('add-course/', views.add_course, name='add_course'),
+path('course/<int:course_id>/input-grades/', views.course_grades, name='input_grades'),
+path('course/<int:course_id>/', views.course_detail, name='course_detail'),
+path('course/<int:course_id>/create-model/', views.create_model_page, name='create_model_page'),
+path('course/<int:course_id>/generate-predictions/', views.generate_predictions, name='generate_predictions'),
+# Student management
+path('course/<int:course_id>/add-student/', views.add_student_to_course, name='add_student_to_course'),
+path('course/<int:course_id>/remove-student/<int:student_id>/', views.remove_student_from_course, name='remove_student_from_course'),
+path('course/<int:course_id>/search-students/', views.search_students, name='search_students'),
+path('student-grades/', views.student_grades, name='student_grades'),
+path('students/promote-selected/', views.promote_selected_students, name='promote_selected_students'),
+
+    
+]

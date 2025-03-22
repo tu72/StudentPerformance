@@ -1,0 +1,275 @@
+{% extends 'base.html' %}
+{% block title %}{{ course.name }} - Course Details{% endblock %}
+{% block page_title %}
+    {{ course.name }} ({{ course.code }})
+    <a href="#" class="btn btn-sm btn-outline-secondary ms-2" title="Course Settings">
+        <i data-feather="settings"></i>
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'teacher_dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active">{{ course.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="me-3">
+                            <div class="text-white-75">Total Students</div>
+                            <div class="display-6">{{ students|length }}</div>
+                        </div>
+                        <i data-feather="users" class="feather-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card bg-warning text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="me-3">
+                            <div class="text-white-75">Students at Risk</div>
+                            <div class="display-6">{{ course.at_risk_count|default:"0" }}</div>
+                        </div>
+                        <i data-feather="alert-triangle" class="feather-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="me-3">
+                            <div class="text-white-75">Average Performance</div>
+                            <div class="display-6">{{ course.average_performance|default:"0"|floatformat:1 }}%</div>
+                        </div>
+                        <i data-feather="bar-chart-2" class="feather-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-xl-3 mb-4">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="me-3">
+                            <div class="text-white-75">Prediction Models</div>
+                            <div class="display-6">{{ prediction_models|length }}</div>
+                        </div>
+                        <i data-feather="cpu" class="feather-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Students</h5>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                        <i data-feather="plus"></i> Add Student
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if students %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>ID</th>
+                                    <th>Status</th>
+                                    
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in students %}
+                                    <tr>
+                                        <td>{{ student.name }}</td>
+                                        <td>{{ student.student_id }}</td>
+                                        <td>
+                                            <span class="badge bg-success">Active</span>
+                                        </td>
+                                        
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <p>No students enrolled in this course.</p>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                                <i data-feather="plus"></i> Add Student
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Prediction Models</h5>
+                    <a href="{% url 'create_model_page' course.id %}" class="btn btn-primary btn-sm">
+                        <i data-feather="plus"></i> Create Model
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if prediction_models %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Model Name</th>
+                                        <th>Target</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for model in prediction_models %}
+                                        <tr>
+                                            <td>{{ model.name }}</td>
+                                            <td>{{ model.target }}</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a href="#" class="btn btn-sm btn-outline-primary">Apply</a>
+                                                    <a href="#" class="btn btn-sm btn-outline-danger">Delete</a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <p>No prediction models created yet.</p>
+                            <a href="{% url 'create_model_page' course.id %}" class="btn btn-primary">
+                                <i data-feather="plus"></i> Create Prediction Model
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Student Modal -->
+<div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addStudentModalLabel">Add Student to Course</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addStudentForm" method="post" action="{% url 'add_student_to_course' course.id %}">
+                    {% csrf_token %}
+                    
+                    <!-- Existing Student Search -->
+                    <div class="mb-3">
+                        <label class="form-label">Search Existing Students</label>
+                        <select id="existingStudentSelect" class="form-select">
+                            <option value="">Type to search students...</option>
+                        </select>
+                        <div class="form-text">If the student is already in the system, search and select them here.</div>
+                    </div>
+                    
+                    <div class="text-center mb-3">- OR -</div>
+                    
+                    <!-- Add New Student -->
+                    <div class="mb-3">
+                        <label for="studentName" class="form-label">Student Name</label>
+                        <input type="text" class="form-control" id="studentName" name="student_name">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="studentId" class="form-label">Student ID</label>
+                        <input type="text" class="form-control" id="studentId" name="student_id">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="addStudentForm" class="btn btn-primary">Add Student</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Select2 for student search
+        $('#existingStudentSelect').select2({
+            placeholder: 'Search for a student...',
+            minimumInputLength: 2,
+            ajax: {
+                url: '{% url "search_students" course.id %}',
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return {
+                        term: params.term
+                    };
+                },
+                processResults: function(data) {
+                    return {
+                        results: data.results
+                    };
+                },
+                cache: true
+            }
+        });
+        
+        // Handle selection of existing student
+        $('#existingStudentSelect').on('select2:select', function(e) {
+            var data = e.params.data;
+            var nameParts = data.text.split(' (');
+            var studentName = nameParts[0];
+            var studentId = nameParts[1].replace(')', '');
+            
+            // Fill in the form fields
+            $('#studentName').val(studentName);
+            $('#studentId').val(studentId);
+        });
+        
+        // Handle remove student buttons
+        const removeButtons = document.querySelectorAll('.remove-student-btn');
+        removeButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const studentId = this.dataset.studentId;
+                const studentName = this.dataset.studentName;
+                
+                if (confirm(`Are you sure you want to remove ${studentName} from this course?`)) {
+                    window.location.href = `{% url 'course_detail' course.id %}remove-student/${studentId}/`;
+                }
+            });
+        });
+        
+        // Replace Feather icons
+        feather.replace();
+    });
+</script>
+{% endblock %}

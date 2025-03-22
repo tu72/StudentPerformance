@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}About - Student Performance Prediction System{% endblock %}
+{% block page_title %}About the Project{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row g-4">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title">Abstract</h2>
+                    <p class="lead">
+                        This project presents a Student Performance Prediction System, a web-based platform combining machine learning techniques with educational data analysis to enhance student success. The system addresses the critical challenge faced by educators in identifying struggling students early enough for effective intervention. By analyzing key indicators such as grades, attendance, and study habits, the system provides timely insights for both teachers and students.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm bg-light">
+                <div class="card-body">
+                    <h3 class="card-title">Quick Links</h3>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item bg-light">
+                            <a href="#introduction">Introduction</a>
+                        </li>
+                        <li class="list-group-item bg-light">
+                            <a href="#project-scope">Project Scope</a>
+                        </li>
+                        <li class="list-group-item bg-light">
+                            <a href="#aim-objectives">Aim and Objectives</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm" id="introduction">
+                <div class="card-body">
+                    <h2 class="card-title">Introduction</h2>
+                    <p>
+                        In the modern education system, improving student performance is a key goal for both teachers and students. However, understanding the factors that affect student success and identifying struggling students in advance can be challenging. Educators often rely on manual processes or basic tools, which may not provide the insights needed for early interventions.
+                    </p>
+                    <p>
+                        This project aims to solve this problem by developing a Student Performance Prediction System using machine learning. The system will analyze data such as grades, attendance, and study habits to predict student performance. Teachers can use these predictions to identify students who need extra support, while students can receive personalized recommendations to improve their learning outcomes.
+                    </p>
+                    <p>
+                        By combining advanced machine learning techniques with a user-friendly web platform, this project seeks to make it easier for educators to monitor performance and take timely actions to help students succeed.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm" id="project-scope">
+                <div class="card-body">
+                    <h2 class="card-title">Project Scope</h2>
+                    <p>The scope of this project is to develop a web-based Student Performance Prediction System that uses machine learning to analyze academic and behavioral data. The system will focus on providing the following:</p>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-primary text-white">
+                                    <h4 class="mb-0">For Teachers</h4>
+                                </div>
+                                <div class="card-body">
+                                    <ul>
+                                        <li>A platform to input student data, such as grades, attendance, and study habits</li>
+                                        <li>Predictions and insights at the class level to help identify at-risk students</li>
+                                        <li>Detailed reports to support decision-making and planning</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-success text-white">
+                                    <h4 class="mb-0">For Students</h4>
+                                </div>
+                                <div class="card-body">
+                                    <ul>
+                                        <li>Access to personal performance predictions</li>
+                                        <li>Personalized recommendations to improve academic outcomes</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p class="mt-4">
+                        The system will prioritize accuracy, usability, and scalability, ensuring it meets the needs of both educators and students.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4 mb-5">
+        <div class="col-12">
+            <div class="card shadow-sm" id="aim-objectives">
+                <div class="card-body">
+                    <h2 class="card-title">Aim and Objectives</h2>
+                    <ol class="list-group list-group-numbered">
+                        <li class="list-group-item">Collect and preprocess data such as grades, attendance, and study habits to ensure it is ready for analysis</li>
+                        <li class="list-group-item">Develop and train machine learning models to predict student performance accurately</li>
+                        <li class="list-group-item">Build a user-friendly web platform to display predictions and insights for teachers and students</li>
+                        <li class="list-group-item">Provide teachers with class-level insights and the ability to generate performance reports</li>
+                        <li class="list-group-item">Offer students personalized predictions and recommendations to improve their academic performance</li>
+                        <li class="list-group-item">Test and evaluate the system for accuracy, usability, and scalability</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
