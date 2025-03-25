@@ -113,21 +113,32 @@
                         <!-- Level 1 tab content, only shown when level 1 tab is active -->
                         {% if active_tab == 'level1' %}
                         <div class="tab-pane fade show active" id="level1" role="tabpanel" aria-labelledby="level1-tab">
-                            <!-- Promotion form -->
-                            <form id="promotionForm" method="post" action="{% url 'promote_selected_students' %}">
-                                {% csrf_token %}
-                                <div class="select-all-container mb-3">
-                                    <input type="checkbox" id="selectAllStudents" class="student-checkbox">
-                                    <label for="selectAllStudents">Select All Level 1 Students</label>
-                                </div>
-                                
-                                <!-- Promotion button -->
-                                <div class="d-grid gap-2 d-md-flex mb-4">
-                                    <button type="submit" class="btn btn-warning" id="promoteButton">
+                            <!-- Add Student and Promotion Controls -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <!-- Promotion form -->
+                                <form id="promotionForm" method="post" action="{% url 'promote_selected_students' %}">
+                                    {% csrf_token %}
+                                    <div class="select-all-container">
+                                        <input type="checkbox" id="selectAllStudents" class="student-checkbox">
+                                        <label for="selectAllStudents">Select All Level 1 Students</label>
+                                    </div>
+                                    
+                                    <!-- Promotion button -->
+                                    <button type="submit" class="btn btn-warning mt-2" id="promoteButton">
                                         <i data-feather="arrow-up-circle"></i> Promote Selected Students
                                     </button>
+                                </form>
+                                
+                                <!-- Add Student Button - Only for Level 1 -->
+                                <div>
+                                    <a href="{% url 'upload_grades' %}" class="btn btn-info me-2">
+                                        <i data-feather="upload"></i> Upload Grades (CSV)
+                                    </a>
+                                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                                        <i data-feather="user-plus"></i> Add Student to Level 1
+                                    </button>
                                 </div>
-                            </form>
+                            </div>
                         </div>
                         {% else %}
                         <!-- Level 2 tab content -->
@@ -205,28 +216,15 @@
                                                                        name="grade_{{ student.id }}_{{ course.id }}" 
                                                                        value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'grade'|default:'' }}"
                                                                        min="0" max="100" step="0.1">
-                                                                <span class="attendance-label">Attendance %</span>
-                                                                <input type="number" 
-                                                                       class="form-control form-control-sm input-attendance" 
-                                                                       name="attendance_{{ student.id }}_{{ course.id }}" 
-                                                                       value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'attendance'|default:'' }}"
-                                                                       min="0" max="100" step="0.1">
                                                             {% else %}
                                                                 <!-- Non-editable text for level 1 courses shown to level 2 students -->
                                                                 <p class="mb-0 fw-bold">
                                                                     {{ grades_data|get_item:student.id|get_item:course.id|get_item:'grade'|default:'-' }}
                                                                 </p>
-                                                                <span class="attendance-label">Attendance %</span>
-                                                                <p class="mb-0 text-muted">
-                                                                    {{ grades_data|get_item:student.id|get_item:course.id|get_item:'attendance'|default:'-' }}
-                                                                </p>
                                                                 <!-- Hidden inputs to preserve data during form submission -->
                                                                 <input type="hidden" 
                                                                        name="grade_{{ student.id }}_{{ course.id }}" 
                                                                        value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'grade'|default:'' }}">
-                                                                <input type="hidden" 
-                                                                       name="attendance_{{ student.id }}_{{ course.id }}" 
-                                                                       value="{{ grades_data|get_item:student.id|get_item:course.id|get_item:'attendance'|default:'' }}">
                                                             {% endif %}
                                                         </div>
                                                     </td>
@@ -248,6 +246,46 @@
         </div>
     </div>
 </div>
+
+<!-- Add Student Modal - Only for Level 1 -->
+<div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addStudentModalLabel">Add Student to Level 1</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addStudentForm" method="post" action="{% url 'add_student_to_level' 1 %}">
+                    {% csrf_token %}
+                    
+                    <!-- Add single student -->
+                    <div class="mb-3">
+                        <label for="studentName" class="form-label">Student Name</label>
+                        <input type="text" class="form-control" id="studentName" name="student_name">
+                    </div>
+                    
+                    <!-- Add bulk students -->
+                    <hr>
+                    <div class="mb-3">
+                        <label class="form-label">Add Multiple Students</label>
+                        <div class="d-flex align-items-center mb-2">
+                            <input type="number" class="form-control me-2" id="bulkCount" name="bulk_count" min="1" max="50" placeholder="Number of students">
+                            <button type="button" class="btn btn-primary" id="addBulkStudentsBtn">Add Bulk</button>
+                        </div>
+                        <div class="form-text">Creates multiple students with auto-generated IDs and placeholder names</div>
+                    </div>
+                    
+                    <input type="hidden" name="action" value="single_add" id="actionType">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="addSingleStudentBtn">Add Student</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -261,6 +299,18 @@
                 if (value < 0) this.value = 0;
                 if (value > 100) this.value = 100;
             });
+        });
+        
+        // Handle single student add button
+        document.getElementById('addSingleStudentBtn').addEventListener('click', function() {
+            document.getElementById('actionType').value = 'single_add';
+            document.getElementById('addStudentForm').submit();
+        });
+        
+        // Handle bulk student add button
+        document.getElementById('addBulkStudentsBtn').addEventListener('click', function() {
+            document.getElementById('actionType').value = 'bulk_add';
+            document.getElementById('addStudentForm').submit();
         });
         
         // Select all functionality for level 1 students

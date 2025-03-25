@@ -40,10 +40,15 @@ class CourseForm(forms.ModelForm):
         
     def clean_code(self):
         code = self.cleaned_data.get('code')
-        teacher = self.initial.get('teacher')
         
-        # Check if course with this code already exists for this teacher
-        if teacher and Course.objects.filter(code=code, teacher=teacher).exists():
+        # Check if course with this code already exists
+        if Course.objects.filter(code=code).exists() and not self.instance.pk:
             raise forms.ValidationError("A course with this code already exists. Please use a different code.")
         
         return code
+
+class GradeUploadForm(forms.Form):
+    csv_file = forms.FileField(
+        label='Select a CSV file',
+        help_text='CSV file must have student IDs in the first column and course codes in the header row.'
+    )

@@ -14,7 +14,7 @@ class Student(models.Model):
     """Student model representing a student in the system."""
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255)
-    student_id = models.CharField(max_length=20, unique=True)
+    student_id = models.IntegerField(unique=True)
     level = models.PositiveIntegerField(default=1)  # Starting level is 1
     courses = models.ManyToManyField('Course', related_name='students', blank=True)
     
@@ -41,7 +41,6 @@ class Course(models.Model):
     """Course model representing a class that students can enroll in."""
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=20, unique=True)
-    teacher = models.ForeignKey('Teacher', on_delete=models.CASCADE, related_name='courses')
     level = models.PositiveIntegerField(default=1)
     
     def __str__(self):
@@ -91,17 +90,11 @@ class StudentGrade(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='grades')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='grades')
     grade = models.FloatField(null=True, blank=True)
-    attendance_percentage = models.FloatField(null=True, blank=True)
-
+    
     class Meta:
         unique_together = ('student', 'course')
     def __str__(self):
         return f"{self.student.name} - {self.course.name}: {self.grade if self.grade is not None else 'N/A'}"
-class Attendance(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendance')
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
-    date = models.DateField()
-    status = models.CharField(max_length=20)  # "present", "absent", "excused"
 
 class PredictionModel(models.Model):
     name = models.CharField(max_length=100)
@@ -112,6 +105,7 @@ class PredictionModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return f"{self.name} ({self.course.name})"
+
 class Prediction(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='predictions')
     model = models.ForeignKey(PredictionModel, on_delete=models.CASCADE)

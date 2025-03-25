@@ -1,6 +1,60 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.apps import apps
+from django.db import transaction
+
+
+# Create attendance courses for each level if they don't exist yet
+def create_attendance_courses():
+    """
+    Make sure attendance courses exist for each level.
+    Each level should have a dedicated attendance course.
+    """
+    try:
+        Course = apps.get_model('performance_app', 'Course')
+        
+        # Get all levels in the system by looking at students
+        Student = apps.get_model('performance_app', 'Student')
+        levels = Student.objects.values_list('level', flat=True).distinct()
+        
+        # If no students exist yet, default to levels 1 and 2
+        if not levels:
+            levels = [1, 2]
+        
+        created_any = False
+        
+        # Create attendance course for each level
+        for level in levels:
+            code = f"ATTEND{level}"
+            attend, created = Course.objects.get_or_create(
+                code=code,
+                defaults={
+                    'name': f"Attendance Level {level}",
+                    'level': level
+                }
+            )
+            
+            if created:
+                print(f"Created Level {level} attendance course: {attend}")
+                created_any = True
+            else:
+                print(f"Level {level} attendance course already exists: {attend}")
+            
+        return created_any
+    except Exception as e:
+        print(f"Error creating attendance courses: {str(e)}")
+        return False
+
+@receiver(post_save, sender='performance_app.Student')
+def create_attendance_courses_after_student_creation(sender, instance, created, **kwargs):
+    """
+    Create attendance courses when a student is created.
+    """
+    if created:
+        # Only create attendance courses if this is the first student
+        Student = apps.get_model('performance_app', 'Student')
+        if Student.objects.count() == 1:
+            transaction.on_commit(create_attendance_courses)
 
 
 @receiver(post_save, sender='performance_app.Course')

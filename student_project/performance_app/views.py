@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, authenticate
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Avg
 import numpy as np
 import os
@@ -13,6 +13,9 @@ from django.conf import settings
 from .models import *
 from .forms import *
 from django.views.decorators.http import require_POST
+from django.urls import reverse
+import csv
+import io
 # Basic Views
 def home(request):
     """Home page view."""
@@ -64,9 +67,8 @@ def teacher_dashboard(request):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
         
-    # Get courses taught by this teacher
-    teacher = request.user.teacher
-    courses = Course.objects.filter(teacher=teacher)
+    # Get all courses since there is no teacher field anymore
+    courses = Course.objects.all()
     
     # Calculate statistics for dashboard
     at_risk_count = 0
@@ -107,13 +109,11 @@ def add_course(request):
         return redirect('dashboard')
     
     if request.method == 'POST':
-        form = CourseForm(request.POST, initial={'teacher': request.user.teacher})
+        form = CourseForm(request.POST)
         
         if form.is_valid():
-            # Create course but don't save to DB yet
-            course = form.save(commit=False)
-            course.teacher = request.user.teacher
-            course.save()
+            # Create course and save directly since we don't need to set teacher anymore
+            course = form.save()
             
             messages.success(request, f'Course "{course.name}" has been created successfully.')
             return redirect('teacher_dashboard')
@@ -133,8 +133,8 @@ def course_detail(request, course_id):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
         
-    # Get the course
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     
     # Get students enrolled in this course
     students = course.students.all()
@@ -168,11 +168,8 @@ def student_grades(request):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
         
-    # Get the teacher
-    teacher = request.user.teacher
-    
-    # Get all courses taught by this teacher, organized by level
-    courses = Course.objects.filter(teacher=teacher).order_by('level', 'name')
+    # Get all courses since there is no teacher field
+    courses = Course.objects.all().order_by('level', 'name')
     
     # Group courses by level for easier template rendering
     course_levels = {}
@@ -203,15 +200,13 @@ def student_grades(request):
                     continue
                     
                 grade_key = f"grade_{student.id}_{course.id}"
-                attendance_key = f"attendance_{student.id}_{course.id}"
                 
                 grade_value = request.POST.get(grade_key, '').strip()
-                attendance_value = request.POST.get(attendance_key, '').strip()
                 
                 # Only process if student is enrolled in this course
                 if student in course.students.all():
-                    # If both are empty and grade doesn't exist, skip
-                    if not grade_value and not attendance_value:
+                    # If empty and grade doesn't exist, skip
+                    if not grade_value:
                         continue
                         
                     # Create or update grade
@@ -219,8 +214,7 @@ def student_grades(request):
                         student=student,
                         course=course,
                         defaults={
-                            'grade': float(grade_value) if grade_value else None,
-                            'attendance_percentage': float(attendance_value) if attendance_value else None
+                            'grade': float(grade_value) if grade_value else None
                         }
                     )
                     
@@ -228,8 +222,6 @@ def student_grades(request):
                     if not created:
                         if grade_value:
                             student_grade.grade = float(grade_value)
-                        if attendance_value:
-                            student_grade.attendance_percentage = float(attendance_value)
                         student_grade.save()
                         
                     updated_count += 1
@@ -272,13 +264,11 @@ def student_grades(request):
             try:
                 grade = StudentGrade.objects.get(student=student, course=course)
                 grades_data[student.id][course.id] = {
-                    'grade': grade.grade,
-                    'attendance': grade.attendance_percentage
+                    'grade': grade.grade
                 }
             except StudentGrade.DoesNotExist:
                 grades_data[student.id][course.id] = {
-                    'grade': None,
-                    'attendance': None
+                    'grade': None
                 }
     
     context = {
@@ -299,8 +289,8 @@ def add_student_to_course(request, course_id):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
             
-    # Get the course
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     
     if request.method == 'POST':
         student_id_number = request.POST.get('student_id')
@@ -348,8 +338,8 @@ def remove_student_from_course(request, course_id, student_id):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
     
-    # Get the course and student
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     student = get_object_or_404(Student, id=student_id)
     
     # Remove student from course
@@ -371,8 +361,8 @@ def search_students(request, course_id):
     if not hasattr(request.user, 'teacher'):
         return JsonResponse({'results': []})
         
-    # Get the course
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     
     search_term = request.GET.get('term', '')
 
@@ -396,11 +386,11 @@ def create_model_page(request, course_id):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
     
-    # Get the course
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     
     # Get available subjects (courses) for prediction
-    teacher_courses = Course.objects.filter(teacher=request.user.teacher)
+    teacher_courses = Course.objects.all()
     
     # Get courses with data
     courses_with_data = []
@@ -422,8 +412,8 @@ def generate_predictions(request, course_id):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
     
-    # Get the course
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     
     if request.method == 'POST':
         # Get selected features and target
@@ -516,6 +506,7 @@ def generate_predictions(request, course_id):
     
     # For GET requests, redirect to model creation page
     return redirect('create_model_page', course_id=course.id)
+
 @login_required
 def course_grades(request, course_id):
     """View to input grades for a specific course."""
@@ -523,8 +514,8 @@ def course_grades(request, course_id):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
         
-    # Get the course
-    course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher)
+    # Get the course without teacher check
+    course = get_object_or_404(Course, id=course_id)
     
     # Get students enrolled in this course
     students = course.students.all()
@@ -533,19 +524,16 @@ def course_grades(request, course_id):
         # Process form submission
         for student in students:
             grade_key = f"grade_{student.id}"
-            attendance_key = f"attendance_{student.id}"
             
             grade_value = request.POST.get(grade_key, '').strip()
-            attendance_value = request.POST.get(attendance_key, '').strip()
             
-            if grade_value or attendance_value:
+            if grade_value:
                 # Create or update grade
                 student_grade, created = StudentGrade.objects.get_or_create(
                     student=student,
                     course=course,
                     defaults={
-                        'grade': float(grade_value) if grade_value else None,
-                        'attendance_percentage': float(attendance_value) if attendance_value else None
+                        'grade': float(grade_value) if grade_value else None
                     }
                 )
                 
@@ -553,8 +541,6 @@ def course_grades(request, course_id):
                 if not created:
                     if grade_value:
                         student_grade.grade = float(grade_value)
-                    if attendance_value:
-                        student_grade.attendance_percentage = float(attendance_value)
                     student_grade.save()
         
         messages.success(request, 'Grades updated successfully.')
@@ -566,13 +552,11 @@ def course_grades(request, course_id):
         try:
             grade = StudentGrade.objects.get(student=student, course=course)
             student_grades[student.id] = {
-                'grade': grade.grade,
-                'attendance': grade.attendance_percentage
+                'grade': grade.grade
             }
         except StudentGrade.DoesNotExist:
             student_grades[student.id] = {
-                'grade': None,
-                'attendance': None
+                'grade': None
             }
     
     context = {
@@ -634,15 +618,12 @@ def student_dashboard(request):
         try:
             grade = StudentGrade.objects.get(student=student, course=course)
             grade_value = grade.grade
-            attendance = grade.attendance_percentage
         except StudentGrade.DoesNotExist:
             grade_value = None
-            attendance = None
         
         course_data.append({
             'course': course,
             'grade': grade_value,
-            'attendance': attendance
         })
     
     context = {
@@ -651,3 +632,315 @@ def student_dashboard(request):
     }
     
     return render(request, 'student/student_dashboard.html', context)
+
+@login_required
+def create_attendance_courses_view(request):
+    """
+    Teacher view to manually create attendance courses.
+    """
+    if not hasattr(request.user, 'teacher'):
+        messages.error(request, 'You need to be a teacher to access this page.')
+        return redirect('dashboard')
+        
+    from .signals import create_attendance_courses
+    
+    created = create_attendance_courses()
+    
+    if created:
+        messages.success(request, 'Attendance courses have been created successfully!')
+    else:
+        messages.info(request, 'Attendance courses already exist or could not be created.')
+        
+    return redirect('teacher_dashboard')
+
+@login_required
+def add_student_to_level(request, level):
+    """Add a student to a specific level and enroll them in all relevant courses."""
+    if not hasattr(request.user, 'teacher'):
+        messages.warning(request, 'You need to be a teacher to access this page.')
+        return redirect('dashboard')
+            
+    if request.method == 'POST':
+        action = request.POST.get('action', 'single_add')
+        
+        # Get the highest student ID currently in the database
+        last_student = Student.objects.all().order_by('-student_id').first()
+        next_id = 1  # Default if no students exist
+        
+        if last_student:
+            next_id = last_student.student_id + 1
+        
+        # Handle bulk student creation
+        if action == 'bulk_add':
+            bulk_count = request.POST.get('bulk_count')
+            
+            if not bulk_count:
+                messages.error(request, 'Please specify how many students to add.')
+                return redirect('student_grades')
+                
+            try:
+                count = int(bulk_count)
+                if count < 1 or count > 50:
+                    messages.error(request, 'Bulk count must be between 1 and 50.')
+                    return redirect('student_grades')
+                
+                students_added = 0
+                
+                for i in range(count):
+                    student_id = next_id + i
+                    
+                    # Create the student with a placeholder name
+                    Student.objects.create(
+                        student_id=student_id,
+                        name=f"Student {student_id}",
+                        level=level
+                    )
+                    students_added += 1
+                
+                messages.success(request, f'Added {students_added} new students to Level {level}.')
+                
+            except ValueError:
+                messages.error(request, 'Invalid bulk count provided.')
+                
+        else:  # single_add
+            student_name = request.POST.get('student_name')
+            
+            if not student_name:
+                messages.error(request, 'Student name is required.')
+                return redirect('student_grades')
+            
+            # Create new student with auto-generated ID
+            student = Student.objects.create(
+                student_id=next_id,
+                name=student_name,
+                level=level
+            )
+            # The signal ensure_student_course_enrollment will automatically 
+            # enroll the student in all relevant courses
+            
+            messages.success(request, f'Student {student.name} added to Level {level} successfully.')
+        
+        # Redirect back to the student grades page with the tab parameter
+        return redirect(f'/student-grades/?tab=level{level}')
+    
+    # If not POST, redirect to student grades page
+    return redirect('student_grades')
+
+@login_required
+def global_search_students(request):
+    """AJAX endpoint to search for students globally (not tied to a specific course)."""
+    if not hasattr(request.user, 'teacher'):
+        return JsonResponse({'results': []})
+    
+    search_term = request.GET.get('term', '')
+
+    if len(search_term) < 2:  # Require at least 2 characters
+        return JsonResponse({'results': []})
+    
+    # Find all students matching the search term
+    students = Student.objects.filter(
+        Q(name__icontains=search_term) | 
+        Q(student_id__icontains=search_term)
+    )[:10]  # Limit results
+    
+    results = [{'id': student.id, 'text': f"{student.name} ({student.student_id})"} for student in students]
+    return JsonResponse({'results': results})
+
+@login_required
+def upload_grades(request):
+    """View for uploading grades in bulk via CSV file."""
+    if not hasattr(request.user, 'teacher'):
+        messages.warning(request, 'You need to be a teacher to access this page.')
+        return redirect('dashboard')
+    
+    # Get all courses for validation and display
+    courses = Course.objects.all().order_by('level', 'name')
+    
+    if request.method == 'POST':
+        form = GradeUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            csv_file = request.FILES['csv_file']
+            
+            # Check file type
+            if not csv_file.name.endswith('.csv'):
+                messages.error(request, 'Please upload a CSV file.')
+                return redirect('upload_grades')
+            
+            # Process the file
+            try:
+                # Read the file
+                csv_data = csv_file.read().decode('utf-8')
+                io_string = io.StringIO(csv_data)
+                reader = csv.reader(io_string)
+                
+                # Extract header row (course codes)
+                header = next(reader)
+                if len(header) < 2:
+                    messages.error(request, 'CSV file must have at least two columns: student ID and at least one grade.')
+                    return redirect('upload_grades')
+                
+                # First column should be "student_id" or similar
+                student_id_col = header[0].strip().lower()
+                if not any(keyword in student_id_col for keyword in ['student', 'id']):
+                    messages.warning(request, f'First column "{header[0]}" doesn\'t appear to be a student ID column, but proceeding anyway.')
+                
+                # Extract course codes from remaining columns
+                course_codes = [code.strip() for code in header[1:]]
+                
+                # Validate course codes
+                valid_course_codes = list(Course.objects.filter(code__in=course_codes).values_list('code', flat=True))
+                invalid_courses = set(course_codes) - set(valid_course_codes)
+                
+                if invalid_courses:
+                    messages.error(request, f'Invalid course codes in CSV: {", ".join(invalid_courses)}')
+                    return redirect('upload_grades')
+                
+                # Get course objects for valid courses
+                course_objects = {course.code: course for course in Course.objects.filter(code__in=valid_course_codes)}
+                
+                # Process grade rows
+                grades_updated = 0
+                students_not_found = []
+                rows_processed = 0
+                
+                for row in reader:
+                    rows_processed += 1
+                    
+                    if not row or len(row) == 0:
+                        continue  # Skip empty rows
+                    
+                    # Get student ID from first column
+                    try:
+                        student_id = int(row[0].strip())
+                    except (ValueError, IndexError):
+                        messages.warning(request, f'Invalid student ID in row {rows_processed + 1}: {row[0] if row else "empty"}. Skipping this row.')
+                        continue
+                    
+                    # Check if student exists
+                    try:
+                        student = Student.objects.get(student_id=student_id)
+                    except Student.DoesNotExist:
+                        students_not_found.append(student_id)
+                        continue
+                    
+                    # Process grades for each course
+                    for i, course_code in enumerate(valid_course_codes):
+                        # Skip if index is out of range
+                        if i + 1 >= len(row):
+                            continue
+                            
+                        # Get grade value
+                        grade_value = row[i + 1].strip()
+                        
+                        # Skip empty grades
+                        if not grade_value:
+                            continue
+                            
+                        try:
+                            # Convert to float
+                            grade_float = float(grade_value)
+                            
+                            # Validate grade range
+                            if grade_float < 0 or grade_float > 100:
+                                messages.warning(request, f'Invalid grade value {grade_float} for student {student_id} in course {course_code}. Grades must be between 0 and 100.')
+                                continue
+                                
+                            # Get course object
+                            course = course_objects.get(course_code)
+                            
+                            # Skip courses that student isn't enrolled in
+                            if student not in course.students.all():
+                                messages.warning(request, f'Student {student_id} is not enrolled in course {course_code}. Skipping this grade.')
+                                continue
+                                
+                            # Create or update grade
+                            student_grade, created = StudentGrade.objects.update_or_create(
+                                student=student,
+                                course=course,
+                                defaults={'grade': grade_float}
+                            )
+                            
+                            grades_updated += 1
+                            
+                        except ValueError:
+                            messages.warning(request, f'Invalid grade format for student {student_id} in course {course_code}: {grade_value}')
+                
+                # Generate appropriate messages
+                if grades_updated > 0:
+                    messages.success(request, f'Successfully updated {grades_updated} grades from {rows_processed} rows.')
+                else:
+                    messages.warning(request, 'No grades were updated. Please check the CSV format and try again.')
+                    
+                if students_not_found:
+                    if len(students_not_found) <= 5:
+                        messages.warning(request, f'The following student IDs were not found: {", ".join(map(str, students_not_found))}')
+                    else:
+                        messages.warning(request, f'{len(students_not_found)} student IDs were not found in the system.')
+                
+                return redirect('student_grades')
+                
+            except Exception as e:
+                messages.error(request, f'Error processing CSV file: {str(e)}')
+                return redirect('upload_grades')
+    else:
+        form = GradeUploadForm()
+    
+    context = {
+        'form': form,
+        'courses': courses
+    }
+    
+    return render(request, 'teacher/upload_grades.html', context)
+
+@login_required
+def download_grades_template(request):
+    """Generate and download a CSV template for grades."""
+    if not hasattr(request.user, 'teacher'):
+        messages.warning(request, 'You need to be a teacher to access this feature.')
+        return redirect('dashboard')
+    
+    # Get all courses for the template
+    courses = Course.objects.all().order_by('level', 'code')
+    
+    # Create a response object with CSV content
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="grades_template.csv"'
+    
+    # Create CSV writer
+    writer = csv.writer(response)
+    
+    # Write header row with course codes
+    header = ['student_id']
+    for course in courses:
+        header.append(course.code)
+    writer.writerow(header)
+    
+    # Get some student IDs for example rows
+    students = Student.objects.all()[:3]
+    if students:
+        # Write data rows for existing students
+        for student in students:
+            row = [student.student_id]
+            for course in courses:
+                # Use existing grade or empty value
+                try:
+                    grade = StudentGrade.objects.get(student=student, course=course)
+                    row.append(grade.grade if grade.grade is not None else '')
+                except StudentGrade.DoesNotExist:
+                    row.append('')
+            writer.writerow(row)
+    else:
+        # Use placeholder student IDs if no students exist
+        for i in range(1, 4):
+            row = [i]
+            for _ in courses:
+                # Add sample grades (empty for one column to show that empty values are accepted)
+                if i == 2 and _ == 1:
+                    row.append('')
+                else:
+                    # Random grade between 60 and 95
+                    import random
+                    row.append(random.randint(60, 95))
+            writer.writerow(row)
+    
+    return response

@@ -18,17 +18,22 @@ urlpatterns = [
     path('student/dashboard/', views.student_dashboard, name='student_dashboard'),
     
     # Course management
-path('add-course/', views.add_course, name='add_course'),
-path('course/<int:course_id>/input-grades/', views.course_grades, name='input_grades'),
-path('course/<int:course_id>/', views.course_detail, name='course_detail'),
-path('course/<int:course_id>/create-model/', views.create_model_page, name='create_model_page'),
-path('course/<int:course_id>/generate-predictions/', views.generate_predictions, name='generate_predictions'),
-# Student management
-path('course/<int:course_id>/add-student/', views.add_student_to_course, name='add_student_to_course'),
-path('course/<int:course_id>/remove-student/<int:student_id>/', views.remove_student_from_course, name='remove_student_from_course'),
-path('course/<int:course_id>/search-students/', views.search_students, name='search_students'),
-path('student-grades/', views.student_grades, name='student_grades'),
-path('students/promote-selected/', views.promote_selected_students, name='promote_selected_students'),
-
+    path('add-course/', views.add_course, name='add_course'),
+    path('course/<int:course_id>/input-grades/', views.course_grades, name='input_grades'),
+    path('course/<int:course_id>/', views.course_detail, name='course_detail'),
+    path('course/<int:course_id>/create-model/', views.create_model_page, name='create_model_page'),
+    path('course/<int:course_id>/generate-predictions/', views.generate_predictions, name='generate_predictions'),
     
+    # Teacher actions
+    path('teacher/create-attendance-courses/', views.create_attendance_courses_view, name='create_attendance_courses'),
+    
+    # Student management
+    path('course/<int:course_id>/add-student/', views.add_student_to_course, name='add_student_to_course'),
+    path('course/<int:course_id>/remove-student/<int:student_id>/', views.remove_student_from_course, name='remove_student_from_course'),
+    path('course/<int:course_id>/search-students/', views.search_students, name='search_students'),
+    path('student-grades/', views.student_grades, name='student_grades'),
+    path('students/promote-selected/', views.promote_selected_students, name='promote_selected_students'),
+    path('students/add-to-level/<int:level>/', views.add_student_to_level, name='add_student_to_level'),
+    path('upload-grades/', views.upload_grades, name='upload_grades'),
+    path('download-grades-template/', views.download_grades_template, name='download_grades_template'),
 ]

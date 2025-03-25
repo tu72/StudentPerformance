@@ -79,9 +79,6 @@
             <div class="card shadow-sm mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0">Students</h5>
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
-                        <i data-feather="plus"></i> Add Student
-                    </button>
                 </div>
                 <div class="card-body">
                     {% if students %}
@@ -112,9 +109,6 @@
                     {% else %}
                         <div class="text-center py-4">
                             <p>No students enrolled in this course.</p>
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStudentModal">
-                                <i data-feather="plus"></i> Add Student
-                            </button>
                         </div>
                     {% endif %}
                 </div>
@@ -169,105 +163,11 @@
         </div>
     </div>
 </div>
-
-<!-- Add Student Modal -->
-<div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addStudentModalLabel">Add Student to Course</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="addStudentForm" method="post" action="{% url 'add_student_to_course' course.id %}">
-                    {% csrf_token %}
-                    
-                    <!-- Existing Student Search -->
-                    <div class="mb-3">
-                        <label class="form-label">Search Existing Students</label>
-                        <select id="existingStudentSelect" class="form-select">
-                            <option value="">Type to search students...</option>
-                        </select>
-                        <div class="form-text">If the student is already in the system, search and select them here.</div>
-                    </div>
-                    
-                    <div class="text-center mb-3">- OR -</div>
-                    
-                    <!-- Add New Student -->
-                    <div class="mb-3">
-                        <label for="studentName" class="form-label">Student Name</label>
-                        <input type="text" class="form-control" id="studentName" name="student_name">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="studentId" class="form-label">Student ID</label>
-                        <input type="text" class="form-control" id="studentId" name="student_id">
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" form="addStudentForm" class="btn btn-primary">Add Student</button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Initialize Select2 for student search
-        $('#existingStudentSelect').select2({
-            placeholder: 'Search for a student...',
-            minimumInputLength: 2,
-            ajax: {
-                url: '{% url "search_students" course.id %}',
-                dataType: 'json',
-                delay: 250,
-                data: function(params) {
-                    return {
-                        term: params.term
-                    };
-                },
-                processResults: function(data) {
-                    return {
-                        results: data.results
-                    };
-                },
-                cache: true
-            }
-        });
-        
-        // Handle selection of existing student
-        $('#existingStudentSelect').on('select2:select', function(e) {
-            var data = e.params.data;
-            var nameParts = data.text.split(' (');
-            var studentName = nameParts[0];
-            var studentId = nameParts[1].replace(')', '');
-            
-            // Fill in the form fields
-            $('#studentName').val(studentName);
-            $('#studentId').val(studentId);
-        });
-        
-        // Handle remove student buttons
-        const removeButtons = document.querySelectorAll('.remove-student-btn');
-        removeButtons.forEach(button => {
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                const studentId = this.dataset.studentId;
-                const studentName = this.dataset.studentName;
-                
-                if (confirm(`Are you sure you want to remove ${studentName} from this course?`)) {
-                    window.location.href = `{% url 'course_detail' course.id %}remove-student/${studentId}/`;
-                }
-            });
-        });
-        
         // Replace Feather icons
         feather.replace();
     });

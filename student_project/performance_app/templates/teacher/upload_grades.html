@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Upload Grades - Teacher Dashboard{% endblock %}
+{% block page_title %}Upload Grades from CSV{% endblock %}
+
+{% block extra_css %}
+<style>
+    .available-courses .badge {
+        margin-right: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-lg-8 col-xl-7 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">Upload Student Grades</h5>
+                </div>
+                <div class="card-body">
+                    <!-- 
+                        NOTE: We're using a card component instead of an alert here because
+                        scripts.js has code that automatically dismisses all alerts after 5 seconds.
+                        These instructions should be permanently visible, so we avoid using the alert class.
+                    -->
+                    <div class="card mb-4 border-info">
+                        <div class="card-header bg-info bg-opacity-10">
+                            <h6 class="fw-bold mb-0">CSV File Format Instructions</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>For successful upload, your CSV file must follow these rules:</p>
+                            <ol>
+                                <li>The <strong>first row</strong> must contain column headers with the first column being "student_id" and other columns being valid course codes</li>
+                                <li>Each <strong>subsequent row</strong> must contain a valid student ID in the first column, followed by grades for each course</li>
+                                <li>Grades must be <strong>numeric values</strong> between 0 and 100</li>
+                                <li>Empty cells will be ignored (grades will not be updated)</li>
+                                <li>Students must be <strong>already enrolled</strong> in a course to receive a grade</li>
+                            </ol>
+                            <h6 class="fw-bold mt-3">Example CSV Format:</h6>
+                            <pre class="bg-light p-2 mt-2">
+student_id,CS101,CS201,MATH101
+1,85,77,92
+2,65,88,71
+3,90,,83
+</pre>
+                            <div class="mt-2">
+                                <button id="downloadTemplate" class="btn btn-sm btn-primary me-2">
+                                    <i data-feather="download"></i> Download Template (Client-side)
+                                </button>
+                                <a href="{% url 'download_grades_template' %}" class="btn btn-sm btn-success">
+                                    <i data-feather="download"></i> Download Template (Server-generated)
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="available-courses mt-4">
+                        <h6>Available Course Codes:</h6>
+                        <div class="row">
+                            {% for course in courses %}
+                            <div class="col-md-3 mb-2">
+                                <span class="badge bg-primary">{{ course.code }}</span>
+                                <small class="text-muted">{{ course.name }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <form method="post" enctype="multipart/form-data" class="mt-4">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="id_csv_file" class="form-label">{{ form.csv_file.label }}</label>
+                            {{ form.csv_file }}
+                            <div class="form-text">{{ form.csv_file.help_text }}</div>
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'student_grades' %}" class="btn btn-secondary me-md-2">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Upload and Process</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Feather icons if available
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+        
+        // Handle download template button
+        document.getElementById('downloadTemplate').addEventListener('click', function() {
+            // Get available course codes from the page
+            const courseCodes = [];
+            document.querySelectorAll('.available-courses .badge').forEach(badge => {
+                courseCodes.push(badge.textContent.trim());
+            });
+            
+            // Create CSV header with student_id and course codes
+            let csvContent = "student_id";
+            courseCodes.forEach(code => {
+                csvContent += "," + code;
+            });
+            csvContent += "\n";
+            
+            // Add some example rows
+            for (let i = 1; i <= 3; i++) {
+                csvContent += i;
+                courseCodes.forEach(() => {
+                    // Generate a random grade between 60 and 95
+                    const randomGrade = Math.floor(Math.random() * 36) + 60;
+                    csvContent += "," + randomGrade;
+                });
+                csvContent += "\n";
+            }
+            
+            // Create a Blob and download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            // Create a temporary link and click it to download
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'grades_template.csv');
+            document.body.appendChild(link);
+            link.click();
+            
+            // Clean up
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        });
+    });
+</script>
+{% endblock %} 
