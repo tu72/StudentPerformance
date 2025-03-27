@@ -13,11 +13,16 @@ class Teacher(models.Model):
 class Student(models.Model):
     """Student model representing a student in the system."""
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
-    name = models.CharField(max_length=255)
-    student_id = models.IntegerField(unique=True)
-    level = models.PositiveIntegerField(default=1)  # Starting level is 1
+    name = models.CharField(max_length=255, db_index=True)  # Add index for faster name searches
+    student_id = models.IntegerField(unique=True, db_index=True)  # Add index for faster ID lookups
+    level = models.PositiveIntegerField(default=1, db_index=True)  # Add index for level filtering
     courses = models.ManyToManyField('Course', related_name='students', blank=True)
     
+    class Meta:
+        indexes = [
+            models.Index(fields=['level', 'name']),  # Combined index for common filtering
+        ]
+
     def __str__(self):
         return self.name
     
@@ -36,6 +41,37 @@ class Student(models.Model):
             
             return True
         return False
+        
+    @classmethod
+    def bulk_progress_to_next_level(cls, student_ids):
+        """
+        Promote multiple students to the next level efficiently.
+        Returns the number of students successfully promoted.
+        """
+        from .signals import update_student_enrollments_after_level_change
+        from django.db import transaction
+        
+        # Get all eligible students (level < 2)
+        students = cls.objects.filter(id__in=student_ids, level__lt=2)
+        student_count = students.count()
+        
+        if not student_count:
+            return 0
+            
+        # Store original levels for signal processing
+        student_levels = {student.id: student.level for student in students}
+        
+        # Use bulk update for better performance
+        with transaction.atomic():
+            # Update levels in bulk
+            students.update(level=models.F('level') + 1)
+            
+            # Process course enrollments for each updated student
+            for student_id, old_level in student_levels.items():
+                student = cls.objects.get(id=student_id)
+                update_student_enrollments_after_level_change(student, old_level, old_level + 1)
+            
+        return student_count
 
 class Course(models.Model):
     """Course model representing a class that students can enroll in."""
@@ -93,6 +129,10 @@ class StudentGrade(models.Model):
     
     class Meta:
         unique_together = ('student', 'course')
+        indexes = [
+            models.Index(fields=['student', 'course']),
+            models.Index(fields=['course', 'grade']),  # For finding at-risk students
+        ]
     def __str__(self):
         return f"{self.student.name} - {self.course.name}: {self.grade if self.grade is not None else 'N/A'}"
 

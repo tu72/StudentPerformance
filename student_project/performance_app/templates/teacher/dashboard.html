@@ -99,6 +99,14 @@
                             </a>
                         </div>
                     </div>
+
+                    <div class="col-md-4 mb-3">
+                        <div class="d-grid">
+                            <a href="{% url 'prediction_models' %}" class="btn btn-lg btn-info">
+                                <i data-feather="cpu" class="me-2"></i> Prediction Models
+                            </a>
+                        </div>
+                    </div>
                     <!-- Add more quick actions as needed -->
                 </div>
             </div>
@@ -180,7 +188,7 @@
                                                 <div class="btn-group" role="group">
                                                     <a href="{% url 'course_detail' course.id %}" class="btn btn-sm btn-outline-primary">View</a>
                 
-                                                    <a href="{% url 'generate_predictions' course.id %}" class="btn btn-sm btn-outline-warning">Predict</a>
+                                                    <a href="{% url 'create_model_page' course.id %}" class="btn btn-sm btn-outline-warning">Predict</a>
                                                 </div>
                                             </td>
                                         </tr>

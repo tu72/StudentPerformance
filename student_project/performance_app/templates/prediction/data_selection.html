@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+{% load mathfilters %}
+{% block title %}Data Selection - {{ model.name }}{% endblock %}
+{% block page_title %}Data Selection for {{ model.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'teacher_dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'course_detail' model.target_course.id %}">{{ model.target_course.name }}</a></li>
+            <li class="breadcrumb-item active">Data Selection</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Step 2: Data Selection</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Select the students whose data will be used to train the prediction model.
+                        Students must have grades for both the target course and all feature courses to be eligible.
+                    </p>
+                    
+                    <div class="progress mb-3">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 50%" 
+                            aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">Step 2 of 3</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Model Information</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Name:</dt>
+                        <dd class="col-sm-7">{{ model.name }}</dd>
+                        
+                        <dt class="col-sm-5">Target Course:</dt>
+                        <dd class="col-sm-7">{{ model.target_course.name }} ({{ model.target_course.code }})</dd>
+                        
+                        <dt class="col-sm-5">Feature Courses:</dt>
+                        <dd class="col-sm-7">
+                            <ul class="list-unstyled mb-0">
+                                {% for feature in model.features.all %}
+                                    <li>{{ feature.course.name }} ({{ feature.course.code }})</li>
+                                {% endfor %}
+                            </ul>
+                        </dd>
+                        
+                        <dt class="col-sm-5">Algorithm:</dt>
+                        <dd class="col-sm-7">{{ model.algorithm }}</dd>
+                        
+                        <dt class="col-sm-5">Test Split:</dt>
+                        <dd class="col-sm-7">{% widthratio model.train_test_split 1 100 %}%</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Available Students</h5>
+                    <span class="badge bg-primary">{{ eligible_students|length }} Student(s) Available</span>
+                </div>
+                <div class="card-body">
+                    {% if eligible_students %}
+                        <form method="post" action="{% url 'train_model' model.id %}">
+                            {% csrf_token %}
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="select_all_students">
+                                    <label class="form-check-label" for="select_all_students">
+                                        <strong>Select All Students</strong>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 40px;">Select</th>
+                                            <th>Student Name</th>
+                                            <th>ID</th>
+                                            <th>Target Grade</th>
+                                            <th>Data Completeness</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for student in eligible_students %}
+                                            <tr>
+                                                <td>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input student-checkbox" type="checkbox" 
+                                                            name="selected_students" value="{{ student.id }}" 
+                                                            id="student_{{ student.id }}" checked>
+                                                        <label class="form-check-label" for="student_{{ student.id }}"></label>
+                                                    </div>
+                                                </td>
+                                                <td>{{ student.name }}</td>
+                                                <td>{{ student.student_id }}</td>
+                                                <td>
+                                                    {% if student.target_grade %}
+                                                        {{ student.target_grade }}
+                                                    {% else %}
+                                                        <span class="text-muted">N/A</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <div class="progress" style="height: 8px;">
+                                                        <div class="progress-bar bg-success" role="progressbar" 
+                                                            style="width: {{ student.data_completeness }}%" 
+                                                            aria-valuenow="{{ student.data_completeness }}" 
+                                                            aria-valuemin="0" aria-valuemax="100"></div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="alert alert-info mt-3" role="alert">
+                                <i data-feather="info" class="me-2"></i>
+                                A minimum of 10 students is recommended for reliable predictions.
+                                You currently have <strong>{{ eligible_students|length }}</strong> eligible students with complete data.
+                            </div>
+                            
+                            <div class="d-flex justify-content-between mt-4">
+                                <a href="{% url 'edit_model' model.id %}" class="btn btn-outline-secondary">
+                                    <i data-feather="arrow-left" class="me-1"></i> Back to Configuration
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    Continue to Training <i data-feather="arrow-right" class="ms-1"></i>
+                                </button>
+                            </div>
+                        </form>
+                    {% else %}
+                        <div class="alert alert-warning" role="alert">
+                            <h5><i data-feather="alert-triangle" class="me-2"></i> Insufficient Data</h5>
+                            <p>
+                                There are no students with complete data for all the selected courses.
+                                Students need to have grades for both the target course and all feature courses.
+                            </p>
+                            <hr>
+                            <p class="mb-0">
+                                <a href="{% url 'edit_model' model.id %}" class="btn btn-outline-primary">
+                                    <i data-feather="edit-2" class="me-1"></i> Modify Model Configuration
+                                </a>
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Replace Feather icons
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+        
+        // Select all students checkbox functionality
+        const selectAllCheckbox = document.getElementById('select_all_students');
+        const studentCheckboxes = document.querySelectorAll('.student-checkbox');
+        
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                
+                studentCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = isChecked;
+                });
+            });
+        }
+        
+        // Update "select all" if individual checkboxes change
+        studentCheckboxes.forEach(function(checkbox) {
+            checkbox.addEventListener('change', function() {
+                // Check if all individual checkboxes are checked
+                const allChecked = Array.from(studentCheckboxes).every(function(cb) {
+                    return cb.checked;
+                });
+                
+                // Update the "select all" checkbox accordingly
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = allChecked;
+                }
+            });
+        });
+    });
+</script>
+{% endblock %} 

@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, authenticate
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
-from django.db.models import Q, Avg
+from django.db.models import Q, Avg, F, Index, Prefetch
 import numpy as np
 import os
 import json
@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 from django.urls import reverse
 import csv
 import io
+from django.core.paginator import Paginator
 # Basic Views
 def home(request):
     """Home page view."""
@@ -168,6 +169,10 @@ def student_grades(request):
         messages.warning(request, 'You need to be a teacher to access this page.')
         return redirect('dashboard')
         
+    # Get active tab (level) from request
+    active_tab = request.GET.get('tab', 'level1')
+    active_level = int(active_tab.replace('level', ''))
+    
     # Get all courses since there is no teacher field
     courses = Course.objects.all().order_by('level', 'name')
     
@@ -178,18 +183,23 @@ def student_grades(request):
             course_levels[course.level] = []
         course_levels[course.level].append(course)
     
-    # Get all students enrolled in any of these courses
-    enrolled_student_ids = set()
-    for course in courses:
-        enrolled_student_ids.update(course.students.values_list('id', flat=True))
+    # Filter courses based on active tab
+    relevant_course_ids = [c.id for c in courses if c.level <= active_level]
     
-    # Fix: Corrected the syntax error in this line
-    students = Student.objects.filter(id__in=enrolled_student_ids).order_by('name')
+    # Get only students from the currently active level
+    students = Student.objects.filter(level=active_level).order_by('name')
+    
+    # Implement pagination for students
+    page_number = request.GET.get('page', 1)
+    items_per_page = 50  # Adjust based on your needs
+    paginator = Paginator(students, items_per_page)
+    page_obj = paginator.get_page(page_number)
+    current_students = page_obj.object_list
     
     # If form is submitted, update grades - only where allowed based on student level
     if request.method == 'POST':
         updated_count = 0
-        for student in students:
+        for student in current_students:
             for course in courses:
                 # Skip courses that are higher level than student's level
                 if course.level > student.level:
@@ -204,13 +214,13 @@ def student_grades(request):
                 grade_value = request.POST.get(grade_key, '').strip()
                 
                 # Only process if student is enrolled in this course
-                if student in course.students.all():
+                if student.courses.filter(id=course.id).exists():
                     # If empty and grade doesn't exist, skip
                     if not grade_value:
                         continue
                         
                     # Create or update grade
-                    student_grade, created = StudentGrade.objects.get_or_create(
+                    student_grade, created = StudentGrade.objects.update_or_create(
                         student=student,
                         course=course,
                         defaults={
@@ -218,40 +228,50 @@ def student_grades(request):
                         }
                     )
                     
-                    # Update existing grade
-                    if not created:
-                        if grade_value:
-                            student_grade.grade = float(grade_value)
-                        student_grade.save()
-                        
                     updated_count += 1
         
         messages.success(request, f'Grades updated successfully. {updated_count} records updated.')
-        return redirect('student_grades')
+        # The fix: Use redirect to the named URL, then append the query params
+        return redirect(f'{reverse("student_grades")}?tab={active_tab}&page={page_number}')
     
-    # Prepare data for the template
+    # Get all grades for the current students and relevant courses in a single query
+    all_grades = StudentGrade.objects.filter(
+        student__in=current_students,
+        course__id__in=relevant_course_ids
+    ).select_related('student', 'course')
+    
+    # Create a dictionary to store the grades for faster lookup
+    grades_map = {}
+    for grade in all_grades:
+        if grade.student_id not in grades_map:
+            grades_map[grade.student_id] = {}
+        grades_map[grade.student_id][grade.course_id] = grade.grade
+    
+    # Prefetch course enrollments for the current students
+    student_courses = {}
+    for student in current_students:
+        student_courses[student.id] = set(student.courses.values_list('id', flat=True))
+    
+    # Prepare data structures for template rendering
     grades_data = {}
     student_level_courses = {}
     
-    for student in students:
+    for student in current_students:
         grades_data[student.id] = {}
         student_level_courses[student.id] = {}
         
-        for course in courses:
-            # Check if student is currently enrolled
-            actual_enrollment = student in course.students.all()
+        # Only process courses relevant to the student's level
+        for course in [c for c in courses if c.level <= active_level]:
+            # Check if student is enrolled
+            is_enrolled = course.id in student_courses.get(student.id, set())
             
-            # For level 2 students and level 1 courses:
-            # - They should be marked as enrolled (to show the grades)
-            # - They should not be able to edit (readonly fields)
+            # For level 2 students and level 1 courses: can view but not edit
             if student.level > course.level:
-                # Level 2 student looking at level 1 course
                 can_edit = False
-                can_view = True  # Always allow viewing
+                can_view = True
             else:
-                # Normal case: level matches or course level is higher
-                can_edit = actual_enrollment and course.level <= student.level
-                can_view = actual_enrollment and course.level <= student.level
+                can_edit = is_enrolled
+                can_view = is_enrolled
             
             student_level_courses[student.id][course.id] = {
                 'enrolled': True,  # Always mark as enrolled to avoid "Not Enrolled" message
@@ -259,25 +279,19 @@ def student_grades(request):
                 'can_view': can_view
             }
             
-            # IMPORTANT CHANGE: Always try to get grades for all students and all courses,
-            # regardless of current enrollment status
-            try:
-                grade = StudentGrade.objects.get(student=student, course=course)
-                grades_data[student.id][course.id] = {
-                    'grade': grade.grade
-                }
-            except StudentGrade.DoesNotExist:
-                grades_data[student.id][course.id] = {
-                    'grade': None
-                }
+            # Get the grade from our preloaded map
+            grades_data[student.id][course.id] = {
+                'grade': grades_map.get(student.id, {}).get(course.id, None)
+            }
     
     context = {
         'courses': courses,
         'course_levels': course_levels,
-        'students': students,
+        'students': current_students,
         'grades_data': grades_data,
         'student_level_courses': student_level_courses,
-        'active_tab': request.GET.get('tab', 'level1')
+        'active_tab': active_tab,
+        'page_obj': page_obj,
     }
     
     return render(request, 'teacher/student_grades.html', context)
@@ -400,10 +414,10 @@ def create_model_page(request, course_id):
     
     context = {
         'course': course,
-        'available_courses': courses_with_data,
+        'courses': courses_with_data,
     }
     
-    return render(request, 'teacher/create_model.html', context)
+    return render(request, 'prediction/create.html', context)
 
 @login_required
 def generate_predictions(request, course_id):
@@ -573,29 +587,36 @@ def promote_selected_students(request):
     """
     Promotes multiple selected students to the next level.
     This view handles the form submission from the student_grades.html template.
+    Modified to handle batch processing and avoid TooManyFieldsSent error.
     """
     if not hasattr(request.user, 'teacher'):
         messages.warning(request, 'You need to be a teacher to perform this action.')
         return redirect('dashboard')
     
-    student_ids = request.POST.getlist('student_ids')
+    # Get the list of student IDs either from POST parameters or JSON body
+    student_ids = []
+    
+    # Check if we're using the standard form approach (for small numbers of students)
+    if 'student_ids' in request.POST:
+        student_ids = request.POST.getlist('student_ids')
+    # If we have a JSON payload instead (for bulk promotion)
+    elif request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body)
+            student_ids = data.get('student_ids', [])
+        except json.JSONDecodeError:
+            messages.error(request, "Invalid JSON data received")
+            return redirect('student_grades')
     
     if not student_ids:
         messages.warning(request, "No students were selected for promotion.")
         return redirect('student_grades')
     
-    promoted_count = 0
-    for student_id in student_ids:
-        try:
-            student = Student.objects.get(id=student_id)
-            # The progress_to_next_level method now handles all enrollment changes
-            if student.progress_to_next_level():
-                promoted_count += 1
-        except Student.DoesNotExist:
-            continue
+    # Use the new bulk promotion method
+    total_promoted = Student.bulk_progress_to_next_level(student_ids)
     
-    if promoted_count > 0:
-        messages.success(request, f"{promoted_count} students have been promoted to the next level.")
+    if total_promoted > 0:
+        messages.success(request, f"{total_promoted} students have been promoted to the next level.")
     else:
         messages.info(request, "No students were eligible for promotion.")
     
@@ -680,8 +701,8 @@ def add_student_to_level(request, level):
                 
             try:
                 count = int(bulk_count)
-                if count < 1 or count > 50:
-                    messages.error(request, 'Bulk count must be between 1 and 50.')
+                if count < 1 or count > 5000:
+                    messages.error(request, 'Bulk count must be between 1 and 5000.')
                     return redirect('student_grades')
                 
                 students_added = 0
@@ -721,7 +742,7 @@ def add_student_to_level(request, level):
             messages.success(request, f'Student {student.name} added to Level {level} successfully.')
         
         # Redirect back to the student grades page with the tab parameter
-        return redirect(f'/student-grades/?tab=level{level}')
+        return redirect(f'{reverse("student_grades")}?tab=level{level}')
     
     # If not POST, redirect to student grades page
     return redirect('student_grades')
@@ -784,19 +805,23 @@ def upload_grades(request):
                 if not any(keyword in student_id_col for keyword in ['student', 'id']):
                     messages.warning(request, f'First column "{header[0]}" doesn\'t appear to be a student ID column, but proceeding anyway.')
                 
-                # Extract course codes from remaining columns
-                course_codes = [code.strip() for code in header[1:]]
+                # Extract course codes from remaining columns while preserving order
+                header_course_codes = [code.strip() for code in header[1:]]
                 
                 # Validate course codes
-                valid_course_codes = list(Course.objects.filter(code__in=course_codes).values_list('code', flat=True))
-                invalid_courses = set(course_codes) - set(valid_course_codes)
+                course_objects = {}
+                invalid_courses = []
+                
+                for code in header_course_codes:
+                    try:
+                        course = Course.objects.get(code=code)
+                        course_objects[code] = course
+                    except Course.DoesNotExist:
+                        invalid_courses.append(code)
                 
                 if invalid_courses:
                     messages.error(request, f'Invalid course codes in CSV: {", ".join(invalid_courses)}')
                     return redirect('upload_grades')
-                
-                # Get course objects for valid courses
-                course_objects = {course.code: course for course in Course.objects.filter(code__in=valid_course_codes)}
                 
                 # Process grade rows
                 grades_updated = 0
@@ -823,14 +848,14 @@ def upload_grades(request):
                         students_not_found.append(student_id)
                         continue
                     
-                    # Process grades for each course
-                    for i, course_code in enumerate(valid_course_codes):
-                        # Skip if index is out of range
-                        if i + 1 >= len(row):
+                    # Process grades for each course column
+                    for col_index, course_code in enumerate(header_course_codes):
+                        # Skip if index is out of range (row might be shorter than header)
+                        if col_index + 1 >= len(row):
                             continue
                             
-                        # Get grade value
-                        grade_value = row[i + 1].strip()
+                        # Get grade value from the same column position
+                        grade_value = row[col_index + 1].strip()
                         
                         # Skip empty grades
                         if not grade_value:
@@ -845,7 +870,7 @@ def upload_grades(request):
                                 messages.warning(request, f'Invalid grade value {grade_float} for student {student_id} in course {course_code}. Grades must be between 0 and 100.')
                                 continue
                                 
-                            # Get course object
+                            # Get course object from our map
                             course = course_objects.get(course_code)
                             
                             # Skip courses that student isn't enrolled in

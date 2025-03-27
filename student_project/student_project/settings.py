@@ -50,6 +50,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'performance_app.middleware.StudentGradesCacheMiddleware',  # Our custom middleware
 ]
 
 ROOT_URLCONF = 'student_project.urls'
@@ -148,3 +149,6 @@ MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
 # SECURE_SSL_REDIRECT = True
 # SESSION_COOKIE_SECURE = True
 # CSRF_COOKIE_SECURE = True
+
+# Increase maximum number of form fields for large operations
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000

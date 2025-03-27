@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}Create Prediction Model{% endblock %}
+{% block page_title %}Create Prediction Model{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'teacher_dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'course_detail' course.id %}">{{ course.name }}</a></li>
+            <li class="breadcrumb-item active">Create Model</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Create a New Prediction Model</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Use this form to create a new prediction model that will analyze existing student data
+                        and predict student performance in a target course based on their performance in other courses.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Step 1: Model Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'create_model' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="course_id" value="{{ course.id }}">
+                        
+                        <div class="mb-3">
+                            <label for="model_name" class="form-label">Model Name</label>
+                            <input type="text" class="form-control" id="model_name" name="name" 
+                                placeholder="Enter a descriptive name for this model" required>
+                            <div class="form-text">Choose a name that will help you identify this model later.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="model_description" class="form-label">Description (Optional)</label>
+                            <textarea class="form-control" id="model_description" name="description" 
+                                rows="3" placeholder="Describe the purpose of this prediction model"></textarea>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="target_course" class="form-label">Target Course to Predict</label>
+                            <select class="form-select" id="target_course" name="target_course" required>
+                                <option value="" selected disabled>Select the course you want to predict grades for</option>
+                                {% for course in courses %}
+                                    <option value="{{ course.id }}">{{ course.name }} ({{ course.code }})</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">This is the course whose grades will be predicted by the model.</div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label">Feature Courses</label>
+                            <p class="text-muted small">Select courses that you believe influence performance in the target course. 
+                            These will be used as predictive features.</p>
+                            
+                            <div class="row">
+                                {% for course in courses %}
+                                <div class="col-md-4 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="feature_courses" value="{{ course.id }}" 
+                                            id="feature_{{ course.id }}">
+                                        <label class="form-check-label" for="feature_{{ course.id }}">
+                                            {{ course.name }} ({{ course.code }})
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="algorithm" class="form-label">Prediction Algorithm</label>
+                            <select class="form-select" id="algorithm" name="algorithm">
+                                <option value="LinearRegression">Linear Regression</option>
+                                <option value="GradientBoosting" selected>Gradient Boosting (Recommended)</option>
+                                <option value="RandomForest">Random Forest</option>
+                                <option value="SupportVectorRegression">Support Vector Regression</option>
+                            </select>
+                            <div class="form-text">The machine learning algorithm that will be used for prediction.</div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="train_test_split" class="form-label">Test Data Percentage: <span id="split_value">20%</span></label>
+                            <input type="range" class="form-range" min="10" max="40" step="5" 
+                                id="train_test_split" name="train_test_split" value="20">
+                            <div class="form-text">Percentage of data to use for testing model accuracy (recommended: 20-30%).</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'course_detail' course.id %}" class="btn btn-outline-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">
+                                Continue to Data Selection <i data-feather="arrow-right" class="ms-1"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle range input for test split percentage
+        const splitRange = document.getElementById('train_test_split');
+        const splitValue = document.getElementById('split_value');
+        
+        if (splitRange && splitValue) {
+            // Update the text when slider changes
+            splitRange.addEventListener('input', function() {
+                splitValue.textContent = this.value + '%';
+            });
+        }
+        
+        // Target course selection should disable same course in features
+        const targetCourse = document.getElementById('target_course');
+        
+        if (targetCourse) {
+            targetCourse.addEventListener('change', function() {
+                const selectedId = this.value;
+                
+                // Enable all feature checkboxes first
+                document.querySelectorAll('input[name="feature_courses"]').forEach(function(checkbox) {
+                    checkbox.disabled = false;
+                    checkbox.parentElement.classList.remove('text-muted');
+                });
+                
+                // Then disable the one matching the target
+                if (selectedId) {
+                    const matchingCheckbox = document.getElementById('feature_' + selectedId);
+                    if (matchingCheckbox) {
+                        matchingCheckbox.checked = false;
+                        matchingCheckbox.disabled = true;
+                        matchingCheckbox.parentElement.classList.add('text-muted');
+                    }
+                }
+            });
+        }
+    });
+</script>
+{% endblock %} 

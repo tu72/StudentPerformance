@@ -127,6 +127,10 @@
                                     <button type="submit" class="btn btn-warning mt-2" id="promoteButton">
                                         <i data-feather="arrow-up-circle"></i> Promote Selected Students
                                     </button>
+                                    
+                                    <div class="text-muted small mt-2">
+                                        <i class="bi bi-info-circle"></i> You can select and promote any number of students at once.
+                                    </div>
                                 </form>
                                 
                                 <!-- Add Student Button - Only for Level 1 -->
@@ -143,8 +147,15 @@
                         {% else %}
                         <!-- Level 2 tab content -->
                         <div class="tab-pane fade show active" id="level2" role="tabpanel" aria-labelledby="level2-tab">
-                            <div class="alert alert-info">
-                                These students are already at the highest level.
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="alert alert-info">
+                                    These students are already at the highest level.
+                                </div>
+                                <div>
+                                    <a href="{% url 'upload_grades' %}" class="btn btn-info">
+                                        <i data-feather="upload"></i> Upload Grades (CSV)
+                                    </a>
+                                </div>
                             </div>
                         </div>
                         {% endif %}
@@ -241,6 +252,42 @@
                             <button type="submit" class="btn btn-primary">Save All Grades</button>
                         </div>
                     </form>
+                    
+                    <!-- Pagination controls -->
+                    {% if page_obj.has_other_pages %}
+                    <nav aria-label="Student pagination" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?tab={{ active_tab }}&page=1">&laquo; First</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?tab={{ active_tab }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                <li class="page-item"><a class="page-link" href="?tab={{ active_tab }}&page={{ num }}">{{ num }}</a></li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?tab={{ active_tab }}&page={{ page_obj.next_page_number }}">Next</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?tab={{ active_tab }}&page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    <div class="text-center text-muted">
+                        Showing students {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -302,13 +349,13 @@
         });
         
         // Handle single student add button
-        document.getElementById('addSingleStudentBtn').addEventListener('click', function() {
+        document.getElementById('addSingleStudentBtn')?.addEventListener('click', function() {
             document.getElementById('actionType').value = 'single_add';
             document.getElementById('addStudentForm').submit();
         });
         
         // Handle bulk student add button
-        document.getElementById('addBulkStudentsBtn').addEventListener('click', function() {
+        document.getElementById('addBulkStudentsBtn')?.addEventListener('click', function() {
             document.getElementById('actionType').value = 'bulk_add';
             document.getElementById('addStudentForm').submit();
         });
@@ -316,6 +363,7 @@
         // Select all functionality for level 1 students
         const selectAllCheckbox = document.getElementById('selectAllStudents');
         if (selectAllCheckbox) {
+            // Get only checkboxes on the current page
             const studentCheckboxes = document.querySelectorAll('input[name="student_ids"]');
             const promoteButton = document.getElementById('promoteButton');
             
@@ -333,23 +381,98 @@
                 updatePromoteButtonState();
             });
             
-            // Individual checkboxes event listeners
-            studentCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', function() {
+            // Individual checkboxes event listeners - Use event delegation for better performance
+            document.querySelector('tbody').addEventListener('change', function(e) {
+                if (e.target && e.target.matches('input[name="student_ids"]')) {
                     const allChecked = Array.from(studentCheckboxes).every(cb => cb.checked);
                     selectAllCheckbox.checked = allChecked;
                     updatePromoteButtonState();
-                });
+                }
             });
             
             // Initialize button state
             updatePromoteButtonState();
+            
+            // Handle promotion form submission to use AJAX for large datasets
+            const promotionForm = document.getElementById('promotionForm');
+            if (promotionForm) {
+                promotionForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    // Get all selected student IDs
+                    const selectedIds = Array.from(
+                        document.querySelectorAll('input[name="student_ids"]:checked')
+                    ).map(input => input.value);
+                    
+                    if (selectedIds.length === 0) {
+                        alert('Please select at least one student to promote.');
+                        return;
+                    }
+                    
+                    // Get current tab and page for redirect
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const currentTab = urlParams.get('tab') || 'level1';
+                    const currentPage = urlParams.get('page') || '1';
+                    
+                    // If too many students are selected, use AJAX/fetch to avoid form field limit
+                    if (selectedIds.length > 100) {
+                        // Show loading indicator
+                        promoteButton.disabled = true;
+                        promoteButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing ' + selectedIds.length + ' students...';
+                        
+                        // Get CSRF token from the form
+                        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+                        
+                        // Show message for large operations
+                        if (selectedIds.length > 500) {
+                            alert('You are about to promote ' + selectedIds.length + ' students. This may take a moment to complete.');
+                        }
+                        
+                        // Use fetch API to send the data as JSON
+                        fetch('{% url "promote_selected_students" %}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrfToken
+                            },
+                            body: JSON.stringify({
+                                student_ids: selectedIds
+                            })
+                        })
+                        .then(response => {
+                            if (response.ok) {
+                                // Redirect to level2 tab after promotion since students are now level 2
+                                window.location.href = '?tab=level2';
+                            } else {
+                                throw new Error('Error promoting students');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('An error occurred while promoting students. Please try again.');
+                            
+                            // Re-enable the button
+                            promoteButton.disabled = false;
+                            promoteButton.innerHTML = '<i data-feather="arrow-up-circle"></i> Promote Selected Students';
+                            if (typeof feather !== 'undefined') {
+                                feather.replace();
+                            }
+                        });
+                    } else {
+                        // For smaller numbers, use the traditional form submission
+                        this.submit();
+                    }
+                });
+            }
         }
         
-        // Initialize Feather icons if available
-        if (typeof feather !== 'undefined') {
-            feather.replace();
-        }
+        // Defer rendering of table for better performance
+        requestAnimationFrame(function() {
+            // Initialize Feather icons if available
+            if (typeof feather !== 'undefined') {
+                feather.replace();
+            }
+        });
     });
 </script>
 {% endblock %}

@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% load mathfilters %}
+{% block title %}Prediction Models{% endblock %}
+{% block page_title %}Prediction Models{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'teacher_dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item active">Prediction Models</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">All Prediction Models</h5>
+                    <a href="{% url 'create_model' %}" class="btn btn-primary btn-sm">
+                        <i data-feather="plus"></i> Create New Model
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if models %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Model Name</th>
+                                        <th>Target Course</th>
+                                        <th>Features</th>
+                                        <th>Accuracy</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for model in models %}
+                                        <tr>
+                                            <td>{{ model.name }}</td>
+                                            <td>
+                                                <a href="{% url 'course_detail' model.target_course.id %}">
+                                                    {{ model.target_course.name }}
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    {% for feature in model.features.all %}
+                                                        <span class="badge bg-secondary">
+                                                            {{ feature.course.code }}
+                                                        </span>
+                                                    {% endfor %}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="progress me-2" style="width: 100px; height: 6px;">
+                                                        <div class="progress-bar {% if model.r_squared >= 0.7 %}bg-success{% elif model.r_squared >= 0.5 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                                            role="progressbar" 
+                                                            style="width: {% widthratio model.r_squared 1 100 %}%" 
+                                                            aria-valuenow="{% widthratio model.r_squared 1 100 %}" 
+                                                            aria-valuemin="0" 
+                                                            aria-valuemax="100">
+                                                        </div>
+                                                    </div>
+                                                    <span>{{ model.r_squared|floatformat:2 }}</span>
+                                                </div>
+                                            </td>
+                                            <td>{{ model.updated_at|date:"M d, Y" }}</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a href="{% url 'model_detail' model.id %}" class="btn btn-sm btn-outline-primary">
+                                                        <i data-feather="eye"></i>
+                                                    </a>
+                                                    <a href="{% url 'predict_form' model.id %}" class="btn btn-sm btn-outline-success">
+                                                        <i data-feather="bar-chart-2"></i>
+                                                    </a>
+                                                    <a href="{% url 'edit_model' model.id %}" class="btn btn-sm btn-outline-warning">
+                                                        <i data-feather="edit-2"></i>
+                                                    </a>
+                                                    <a href="{% url 'delete_model' model.id %}" class="btn btn-sm btn-outline-danger">
+                                                        <i data-feather="trash-2"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i data-feather="cpu" class="empty-models-icon"></i>
+                            <p class="mt-3">No prediction models have been created yet.</p>
+                            <a href="{% url 'create_model' %}" class="btn btn-primary">
+                                <i data-feather="plus"></i> Create Your First Model
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Replace Feather icons
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+    });
+</script>
+{% endblock %} 
