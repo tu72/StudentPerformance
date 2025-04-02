@@ -397,17 +397,36 @@
                         let row = [], cols = rows[i].querySelectorAll('td, th');
                         
                         for (let j = 0; j < cols.length; j++) {
-                            // Skip checkbox column
+                            // Skip checkbox column and Actions column
                             if (cols[j].querySelector('.form-check')) {
                                 continue;
                             }
                             
-                            // Get innerText and remove any commas
-                            let text = cols[j].innerText.replace(/,/g, '');
-                            // Remove the "Details" button text when exporting
-                            if (text === 'Details') {
-                                text = '';
+                            // Skip the Actions column
+                            if (i === 0 && cols[j].innerText === 'Actions') {
+                                continue;
                             }
+                            
+                            if (j === cols.length - 1 && cols[j].querySelector('.btn-outline-primary')) {
+                                continue;
+                            }
+                            
+                            // Get the text value
+                            let text = '';
+                            
+                            // For confidence column, extract the percentage value
+                            if (cols[j].querySelector('.progress')) {
+                                // Find the confidence percentage from the progress bar's width
+                                const progressBar = cols[j].querySelector('.progress-bar');
+                                if (progressBar) {
+                                    const widthValue = progressBar.style.width;
+                                    text = widthValue;
+                                }
+                            } else {
+                                // For other columns, get the regular text
+                                text = cols[j].innerText.replace(/,/g, '');
+                            }
+                            
                             row.push('"' + text + '"');
                         }
                         

@@ -8,6 +8,7 @@ import numpy as np
 import os
 import json
 import pickle
+import shutil
 from sklearn.linear_model import LinearRegression
 from django.conf import settings
 from .models import *
@@ -240,7 +241,7 @@ def student_grades(request):
                     
                     updated_count += 1
         
-        messages.success(request, f'Grades updated successfully. {updated_count} records updated.')
+        messages.success(request, 'Grades updated successfully.')
         # The fix: Use redirect to the named URL, then append the query params
         return redirect(f'{reverse("student_grades")}?tab={active_tab}&page={page_number}')
     
@@ -1014,11 +1015,6 @@ def upload_grades(request):
                             # Get course object from our map
                             course = course_objects.get(course_code)
                             
-                            # Skip courses that student isn't enrolled in
-                            if student not in course.students.all():
-                                messages.warning(request, f'Student {student_id} is not enrolled in course {course_code}. Skipping this grade.')
-                                continue
-                                
                             # Create or update grade
                             student_grade, created = StudentGrade.objects.update_or_create(
                                 student=student,
@@ -1110,3 +1106,107 @@ def download_grades_template(request):
             writer.writerow(row)
     
     return response
+
+@login_required
+def restore_database_backup(request):
+    """Restore the database from a backup file."""
+    if not hasattr(request.user, 'teacher'):
+        messages.error(request, 'You need to be a teacher to perform this action.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        # Define backup folder path
+        backup_folder = os.path.join(settings.BASE_DIR, 'backup')
+        backup_db_path = os.path.join(backup_folder, 'db.sqlite3')
+        
+        # Check if backup exists
+        if not os.path.exists(backup_db_path):
+            messages.error(request, 'No backup database found. Please ensure a backup exists in the backup folder.')
+            return redirect('teacher_dashboard')
+            
+        try:
+            # Get the current database path from settings
+            db_path = settings.DATABASES['default']['NAME']
+            
+            # Create a temporary backup of the current database just in case
+            temp_backup_path = os.path.join(settings.BASE_DIR, 'db_temp_backup.sqlite3')
+            shutil.copy2(db_path, temp_backup_path)
+            
+            # Copy the backup database to replace the current one
+            shutil.copy2(backup_db_path, db_path)
+            
+            messages.success(request, 'Database has been successfully restored from backup!')
+            
+            # Set a flag to restart the server after the response has been sent
+            restart_server = True
+            
+            # Return the response first
+            response = redirect('teacher_dashboard')
+            
+            # Use a separate thread to restart the server after the response is sent
+            import threading
+            import sys
+            import subprocess
+            
+            def restart_django_server():
+                # Wait a moment for the response to be sent
+                import time
+                time.sleep(2)
+                
+                # Get the current script name (manage.py)
+                script = sys.argv[0]
+                
+                # Get the current working directory
+                cwd = os.getcwd()
+                
+                # Check if we're in a virtual environment
+                if 'VIRTUAL_ENV' in os.environ:
+                    # Use the virtual environment's Python interpreter
+                    python_executable = os.path.join(os.environ['VIRTUAL_ENV'], 'Scripts', 'python.exe')
+                    
+                    # On Linux/Mac the path might be different
+                    if not os.path.exists(python_executable):
+                        python_executable = os.path.join(os.environ['VIRTUAL_ENV'], 'bin', 'python')
+                else:
+                    # Try to detect virtual environment
+                    venv_dir = os.path.join(settings.BASE_DIR, 'venv')
+                    if os.path.exists(venv_dir):
+                        if os.path.exists(os.path.join(venv_dir, 'Scripts', 'python.exe')):
+                            # Windows
+                            python_executable = os.path.join(venv_dir, 'Scripts', 'python.exe')
+                        else:
+                            # Linux/Mac
+                            python_executable = os.path.join(venv_dir, 'bin', 'python')
+                    else:
+                        # Fallback to system Python (likely won't work if Django is in a venv)
+                        python_executable = sys.executable
+                
+                # Restart the server using subprocess
+                # This will kill the current process and start a new one
+                subprocess.Popen([python_executable, script, 'runserver'], cwd=cwd)
+                
+                # Force exit the current process
+                sys.exit(0)
+            
+            if restart_server:
+                # Start a thread that will restart the server
+                threading.Thread(target=restart_django_server).start()
+                
+            return response
+            
+        except Exception as e:
+            # If something goes wrong, try to restore from the temporary backup
+            if os.path.exists(temp_backup_path):
+                try:
+                    shutil.copy2(temp_backup_path, db_path)
+                    messages.error(request, f'Error restoring database: {str(e)}. Original database has been preserved.')
+                except:
+                    messages.error(request, f'Critical error: Failed to restore database AND failed to restore original. Error: {str(e)}')
+            else:
+                messages.error(request, f'Error restoring database: {str(e)}')
+        finally:
+            # Clean up the temporary backup
+            if os.path.exists(temp_backup_path):
+                os.remove(temp_backup_path)
+    
+    return redirect('teacher_dashboard')

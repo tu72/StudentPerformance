@@ -87,10 +87,10 @@
                         <div class="mb-4">
                             <label for="algorithm" class="form-label">Prediction Algorithm</label>
                             <select class="form-select" id="algorithm" name="algorithm">
-                                <option value="LinearRegression">Linear Regression</option>
-                                <option value="GradientBoosting" selected>Gradient Boosting (Recommended)</option>
+                                <option value="ElasticNet">Elastic Net (Linear model with regularization)</option>
+                                <option value="GradientBoostingRegressor" selected>Gradient Boosting (Recommended)</option>
                                 <option value="RandomForest">Random Forest</option>
-                                <option value="SupportVectorRegression">Support Vector Regression</option>
+                                <option value="DecisionTree">Decision Tree</option>
                             </select>
                             <div class="form-text">The machine learning algorithm that will be used for prediction.</div>
                         </div>

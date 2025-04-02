@@ -6,9 +6,9 @@ import numpy as np
 import os
 import json
 import pickle
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import ElasticNet
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.svm import SVR
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split
 from django.conf import settings
@@ -19,14 +19,15 @@ import random
 
 # Utility function to get the appropriate model class
 def get_model_class(algorithm):
-    if algorithm == 'LinearRegression':
-        return LinearRegression()
+    if algorithm == 'ElasticNet':
+        # Alpha (regularization strength) and l1_ratio (mixing parameter) can be tuned
+        return ElasticNet(alpha=0.1, l1_ratio=0.5)
     elif algorithm == 'GradientBoostingRegressor':
         return GradientBoostingRegressor()
     elif algorithm == 'RandomForest':
         return RandomForestRegressor()
-    elif algorithm == 'SupportVectorRegression':
-        return SVR()
+    elif algorithm == 'DecisionTree':
+        return DecisionTreeRegressor(max_depth=10)
     else:
         # Default to gradient boosting
         return GradientBoostingRegressor()
@@ -308,6 +309,20 @@ def train_model_algorithm(model):
         # Normalize to percentages
         if sum(importances) > 0:
             importances = [100 * (imp / sum(importances)) for imp in importances]
+            
+            # Update feature importance values
+            for i, feature in enumerate(model.features.all()):
+                if i < len(importances):
+                    feature.importance = importances[i]
+                    feature.save()
+    # For linear models like ElasticNet, use the absolute coefficients
+    elif hasattr(algorithm, 'coef_'):
+        # Get absolute values of coefficients
+        coeffs = np.abs(algorithm.coef_)
+        
+        # Normalize to percentages
+        if sum(coeffs) > 0:
+            importances = [100 * (coef / sum(coeffs)) for coef in coeffs]
             
             # Update feature importance values
             for i, feature in enumerate(model.features.all()):

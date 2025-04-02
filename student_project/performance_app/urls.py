@@ -28,6 +28,7 @@ urlpatterns = [
     
     # Teacher actions
     path('teacher/create-attendance-courses/', views.create_attendance_courses_view, name='create_attendance_courses'),
+    path('teacher/restore-database/', views.restore_database_backup, name='restore_database'),
     
     # Student management
     path('course/<int:course_id>/add-student/', views.add_student_to_course, name='add_student_to_course'),
