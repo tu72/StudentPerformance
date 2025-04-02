@@ -55,24 +55,9 @@
                             <i data-feather="bar-chart-2" class="me-1"></i> Make Predictions
                         </a>
                         
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="actionMenu" 
-                                data-bs-toggle="dropdown" aria-expanded="false">
-                                <i data-feather="more-horizontal" class="me-1"></i> Actions
-                            </button>
-                            <ul class="dropdown-menu" aria-labelledby="actionMenu">
-                                <li><a class="dropdown-item" href="{% url 'edit_model' model.id %}">
-                                    <i data-feather="edit-2" class="me-2"></i> Edit Model
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'retrain_model' model.id %}">
-                                    <i data-feather="refresh-cw" class="me-2"></i> Retrain Model
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteModal">
-                                    <i data-feather="trash-2" class="me-2"></i> Delete Model
-                                </a></li>
-                            </ul>
-                        </div>
+                        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                            <i data-feather="trash-2" class="me-1"></i> Delete Model
+                        </button>
                     </div>
                 </div>
             </div>
@@ -109,7 +94,7 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0">Recent Predictions</h5>
                     <a href="{% url 'prediction_history' model.id %}" class="btn btn-sm btn-outline-primary">
-                        View All
+                        <i data-feather="list" class="me-1"></i> View All Predictions
                     </a>
                 </div>
                 <div class="card-body">
@@ -243,7 +228,7 @@
                         barHeight: '50%',
                         dataLabels: {
                             position: 'top'
-                        },
+                        }
                     }
                 },
                 dataLabels: {
@@ -254,7 +239,7 @@
                     offsetX: 30
                 },
                 xaxis: {
-                    categories: featureImportance.map(f => f.feature),
+                    categories: featureImportance.map(f => f.feature)
                 },
                 yaxis: {
                     title: {
@@ -268,26 +253,74 @@
             chart.render();
             
             // Scatter plot for prediction accuracy
-            const predictionData = [
+            let predictionData = [
                 {% for prediction in test_predictions %}
                 {
-                    x: {{ prediction.actual_grade|default:0 }},
-                    y: {{ prediction.predicted_grade|default:0 }}
+                    x: {{ prediction.actual_grade|floatformat:2 }},
+                    y: {{ prediction.predicted_grade|floatformat:2 }},
+                    error: {{ prediction.absolute_error|floatformat:2 }},
+                    student: "{{ prediction.student.name|default:'Unknown' }}"
                 },
                 {% endfor %}
             ];
             
+            // Limit the number of points to 30 for better visualization
+            if (predictionData.length > 30) {
+                predictionData = predictionData.slice(0, 30);
+            }
+            
+            // Create perfect prediction line data (diagonal line)
+            const perfectPredictionData = [];
+            if (predictionData.length > 0) {
+                // Find min and max values for x-axis
+                const actualGrades = predictionData.map(p => p.x);
+                const minGrade = Math.max(0, Math.min(...actualGrades) - 5);
+                const maxGrade = Math.min(100, Math.max(...actualGrades) + 5);
+                
+                // Create line data with only two points
+                perfectPredictionData.push({x: Math.round(minGrade), y: Math.round(minGrade)});
+                perfectPredictionData.push({x: Math.round(maxGrade), y: Math.round(maxGrade)});
+            } else {
+                // Fallback if no data
+                perfectPredictionData.push({x: 0, y: 0});
+                perfectPredictionData.push({x: 100, y: 100});
+            }
+            
+            // Calculate error metrics for display
+            const avgError = predictionData.length > 0 
+                ? predictionData.reduce((sum, p) => sum + p.error, 0) / predictionData.length 
+                : 0;
+            
             const scatterOptions = {
-                series: [{
-                    name: "Predictions",
-                    data: predictionData
-                }],
+                series: [
+                    {
+                        name: "Test Predictions",
+                        type: 'scatter',
+                        data: predictionData
+                    },
+                    {
+                        name: "Perfect Prediction",
+                        type: 'line',
+                        data: perfectPredictionData
+                    }
+                ],
                 chart: {
                     height: 300,
-                    type: 'scatter',
+                    type: 'line',
                     zoom: {
                         enabled: true,
                         type: 'xy'
+                    },
+                    toolbar: {
+                        show: true
+                    }
+                },
+                title: {
+                    text: `Test Set Predictions (Avg. Error: ${avgError.toFixed(2)})`,
+                    align: 'center',
+                    style: {
+                        fontSize: '14px',
+                        fontWeight: 'normal'
                     }
                 },
                 xaxis: {
@@ -295,35 +328,56 @@
                         text: 'Actual Grade'
                     },
                     min: 0,
-                    max: 100
+                    max: 100,
+                    labels: {
+                        formatter: function(val) {
+                            return val.toFixed(0);
+                        }
+                    }
                 },
                 yaxis: {
                     title: {
                         text: 'Predicted Grade'
                     },
                     min: 0,
-                    max: 100
+                    max: 100,
+                    labels: {
+                        formatter: function(val) {
+                            return val.toFixed(0);
+                        }
+                    }
                 },
+                colors: ['#4F46E5', '#D3D3D3'],
                 markers: {
-                    size: 5
+                    size: [6, 0],
+                    strokeWidth: 2,
+                    hover: {
+                        size: 9
+                    }
                 },
-                annotations: {
-                    yaxis: [{
-                        y: 0,
-                        y2: 100,
-                        borderColor: '#000',
-                        strokeDashArray: 5,
-                        opacity: 0.3
-                    }]
+                stroke: {
+                    curve: 'straight',
+                    width: [0, 2],
+                    dashArray: [0, 5]
                 },
                 tooltip: {
+                    shared: false,
+                    intersect: true,
                     custom: function({series, seriesIndex, dataPointIndex, w}) {
-                        const data = w.globals.initialSeries[seriesIndex].data[dataPointIndex];
-                        return `<div class="custom-tooltip">
-                            <span>Actual: ${data.x}</span><br>
-                            <span>Predicted: ${data.y}</span>
-                        </div>`;
+                        if (seriesIndex === 0) { // Only for scatter points
+                            const data = w.globals.initialSeries[seriesIndex].data[dataPointIndex];
+                            return `<div class="custom-tooltip p-2">
+                                <div><strong>Student:</strong> ${data.student}</div>
+                                <div><strong>Actual:</strong> ${data.x.toFixed(2)}</div>
+                                <div><strong>Predicted:</strong> ${data.y.toFixed(2)}</div>
+                                <div><strong>Error:</strong> ${data.error.toFixed(2)}</div>
+                            </div>`;
+                        }
+                        return '';
                     }
+                },
+                legend: {
+                    position: 'top'
                 }
             };
 

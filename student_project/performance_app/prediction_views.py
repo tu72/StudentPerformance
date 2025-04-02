@@ -13,7 +13,7 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split
 from django.conf import settings
 from .models import Course, Student, StudentGrade
-from .prediction_models import EnhancedPredictionModel, ModelFeature, ModelTrainingData, ModelPrediction
+from .prediction_models import EnhancedPredictionModel, ModelFeature, ModelTrainingData, ModelPrediction, ModelTestPrediction
 import math
 import random
 
@@ -181,6 +181,7 @@ def train_model_algorithm(model):
     # Prepare data arrays
     X = []  # Feature values
     y = []  # Target values
+    students = []  # Keep track of students for later reference
     
     for student_id in student_ids:
         student = Student.objects.get(id=student_id)
@@ -204,6 +205,7 @@ def train_model_algorithm(model):
         
         X.append(feature_values)
         y.append(target_grade)
+        students.append(student)
     
     # Make sure we have enough data
     if len(X) < 5:
@@ -214,8 +216,8 @@ def train_model_algorithm(model):
         return
     
     # Split into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=model.train_test_split, random_state=42
+    X_train, X_test, y_train, y_test, students_train, students_test = train_test_split(
+        X, y, students, test_size=model.train_test_split, random_state=42
     )
     
     # Convert to numpy arrays
@@ -243,6 +245,47 @@ def train_model_algorithm(model):
     model.rmse = rmse
     model.mae = mae
     model.save()
+    
+    # Clear previous test predictions
+    ModelTestPrediction.objects.filter(model=model).delete()
+    
+    # Create list of test predictions with errors
+    test_pred_data = []
+    for i in range(len(y_test)):
+        test_pred_data.append({
+            'student': students_test[i],
+            'actual': float(y_test[i]),
+            'predicted': float(y_pred[i]),
+            'error': abs(float(y_test[i]) - float(y_pred[i]))
+        })
+    
+    # Sort by absolute error to save a diverse set (include both good and bad predictions)
+    test_pred_data.sort(key=lambda x: x['error'])
+    
+    # Take some with small errors
+    low_error_samples = test_pred_data[:min(10, len(test_pred_data) // 3)]
+    
+    # Take some with large errors
+    high_error_samples = test_pred_data[-(min(10, len(test_pred_data) // 3)):]
+    
+    # Take some from the middle
+    mid_point = len(test_pred_data) // 2
+    mid_error_samples = test_pred_data[mid_point - 5:mid_point + 5]
+    
+    # Combine and limit to 30 samples maximum
+    combined_samples = low_error_samples + mid_error_samples + high_error_samples
+    if len(combined_samples) > 30:
+        combined_samples = combined_samples[:30]
+    
+    # Save test predictions for visualization
+    for sample in combined_samples:
+        ModelTestPrediction.objects.create(
+            model=model,
+            student=sample['student'],
+            actual_grade=sample['actual'],
+            predicted_grade=sample['predicted'],
+            absolute_error=sample['error']
+        )
     
     # Save the trained model to a file
     model_dir = os.path.join(settings.MEDIA_ROOT, 'prediction_models')
@@ -284,17 +327,19 @@ def model_detail(request, model_id):
     # Get recent predictions
     predictions = ModelPrediction.objects.filter(model=model).order_by('-created_at')[:5]
     
-    # Generate random test data for the scatter plot (in a real app, this would be real test data)
-    test_predictions = []
-    for i in range(10):
-        actual = random.uniform(50, 95)
-        error = random.uniform(-15, 15)
-        predicted = max(0, min(100, actual + error))
-        
-        test_predictions.append({
-            'actual_grade': actual,
-            'predicted_grade': predicted
-        })
+    # Update actual grades for predictions that don't have them
+    for prediction in predictions:
+        if prediction.actual_grade is None:
+            try:
+                target_grade = StudentGrade.objects.get(student=prediction.student, course=model.target_course)
+                if target_grade.grade is not None:
+                    prediction.actual_grade = target_grade.grade
+                    prediction.save()
+            except StudentGrade.DoesNotExist:
+                pass
+    
+    # Get real test prediction data instead of generating random data
+    test_predictions = ModelTestPrediction.objects.filter(model=model).order_by('-created_at')
     
     context = {
         'model': model,
@@ -362,9 +407,15 @@ def predict_form(request, model_id):
     # Get all students
     students = Student.objects.all().order_by('name')
     
+    # Get students who already have predictions for this model
+    existing_prediction_students = ModelPrediction.objects.filter(
+        model=model
+    ).values_list('student_id', flat=True)
+    
     context = {
         'model': model,
-        'students': students
+        'students': students,
+        'existing_prediction_students': existing_prediction_students
     }
     
     return render(request, 'prediction/predict_form.html', context)
@@ -403,6 +454,12 @@ def make_prediction(request, model_id):
                 return redirect('predict_form', model_id=model.id)
             
             student = get_object_or_404(Student, id=student_id)
+            
+            # Check if a prediction already exists for this student and model
+            existing_prediction = ModelPrediction.objects.filter(model=model, student=student).first()
+            if existing_prediction:
+                messages.warning(request, f'A prediction already exists for {student.name} with this model. You can view it in the prediction history.')
+                return redirect('single_prediction', model_id=model.id, prediction_id=existing_prediction.id)
             
             # Get feature values
             feature_values = []
@@ -458,11 +515,21 @@ def make_prediction(request, model_id):
                 # Ensure confidence is within 0-1 range
                 confidence_score = max(0, min(1, confidence_score))
                 
+                # Check if student already has a grade in the target course
+                actual_grade = None
+                try:
+                    target_grade = StudentGrade.objects.get(student=student, course=model.target_course)
+                    if target_grade.grade is not None:
+                        actual_grade = target_grade.grade
+                except StudentGrade.DoesNotExist:
+                    pass
+                
                 # Save the prediction with confidence
                 prediction = ModelPrediction.objects.create(
                     model=model,
                     student=student,
                     predicted_grade=prediction_value,
+                    actual_grade=actual_grade,
                     confidence=confidence_score
                 )
                 
@@ -491,8 +558,26 @@ def make_prediction(request, model_id):
             students = Student.objects.filter(id__in=student_ids)
             predictions = []
             skipped_students = []
+            existing_predictions = []
+            
+            # First, check which students already have predictions
+            existing_prediction_students = ModelPrediction.objects.filter(
+                model=model, 
+                student__in=students
+            ).values_list('student_id', flat=True)
+            
+            # Get names of students with existing predictions for the message
+            if existing_prediction_students:
+                existing_students_names = Student.objects.filter(
+                    id__in=existing_prediction_students
+                ).values_list('name', flat=True)
+                existing_predictions.extend(list(existing_students_names))
             
             for student in students:
+                # Skip if student already has a prediction
+                if student.id in existing_prediction_students:
+                    continue
+                
                 # Get feature values for this student
                 feature_values = []
                 has_all_features = True
@@ -525,11 +610,21 @@ def make_prediction(request, model_id):
                         confidence_score = ((r_squared_factor - rmse_factor) / 2) + 0.5
                         confidence_score = max(0, min(1, confidence_score))
                         
+                        # Check if student already has a grade in the target course
+                        actual_grade = None
+                        try:
+                            target_grade = StudentGrade.objects.get(student=student, course=model.target_course)
+                            if target_grade.grade is not None:
+                                actual_grade = target_grade.grade
+                        except StudentGrade.DoesNotExist:
+                            pass
+                        
                         # Save prediction
                         prediction = ModelPrediction.objects.create(
                             model=model,
                             student=student,
                             predicted_grade=prediction_value,
+                            actual_grade=actual_grade,
                             confidence=confidence_score
                         )
                         
@@ -540,6 +635,15 @@ def make_prediction(request, model_id):
                 else:
                     skipped_students.append(student.name)
             
+            # Show message about existing predictions
+            if existing_predictions:
+                if len(existing_predictions) <= 5:
+                    messages.info(request, 
+                                 f'Skipped {", ".join(existing_predictions)} because predictions already exist for these students.')
+                else:
+                    messages.info(request, 
+                                 f'Skipped {len(existing_predictions)} students because predictions already exist for them.')
+            
             if skipped_students:
                 if len(skipped_students) <= 5:
                     messages.warning(request, 
@@ -549,7 +653,12 @@ def make_prediction(request, model_id):
                                    f'Skipped predictions for {len(skipped_students)} students due to missing data.')
             
             if not predictions:
-                messages.error(request, 'Could not make predictions for any of the selected students due to missing data.')
+                if existing_predictions and not skipped_students:
+                    messages.info(request, 'All selected students already have predictions for this model.')
+                elif existing_predictions and skipped_students:
+                    messages.error(request, 'Could not make new predictions. Some students already have predictions and others have missing data.')
+                else:
+                    messages.error(request, 'Could not make predictions for any of the selected students due to missing data.')
                 return redirect('predict_form', model_id=model.id)
             
             # Count predictions by status
@@ -615,9 +724,51 @@ def prediction_history(request, model_id):
     model = get_object_or_404(EnhancedPredictionModel, id=model_id)
     predictions = ModelPrediction.objects.filter(model=model).order_by('-created_at')
     
-    # For now, redirect to model detail with a message
-    messages.info(request, 'Full prediction history view is not yet implemented.')
-    return redirect('model_detail', model_id=model.id)
+    # Count predictions by status
+    passing_count = sum(1 for p in predictions if p.predicted_grade >= 70)
+    at_risk_count = sum(1 for p in predictions if 50 <= p.predicted_grade < 70)
+    failing_count = sum(1 for p in predictions if p.predicted_grade < 50)
+    
+    context = {
+        'model': model,
+        'predictions': predictions,
+        'is_single_prediction': False,
+        'passing_count': passing_count,
+        'at_risk_count': at_risk_count,
+        'failing_count': failing_count,
+        'is_history_view': True
+    }
+    
+    return render(request, 'prediction/prediction_results.html', context)
+
+@login_required
+def delete_predictions(request, model_id):
+    """Delete selected predictions."""
+    if not hasattr(request.user, 'teacher'):
+        messages.warning(request, 'You need to be a teacher to access this page.')
+        return redirect('dashboard')
+    
+    model = get_object_or_404(EnhancedPredictionModel, id=model_id)
+    
+    if request.method == 'POST':
+        # Get selected prediction IDs
+        prediction_ids = request.POST.getlist('prediction_ids')
+        
+        if not prediction_ids:
+            messages.warning(request, 'No predictions were selected for deletion.')
+            return redirect('prediction_history', model_id=model.id)
+        
+        # Delete the selected predictions
+        deleted_count = ModelPrediction.objects.filter(
+            id__in=prediction_ids, 
+            model=model
+        ).delete()[0]
+        
+        messages.success(request, f'Successfully deleted {deleted_count} prediction(s).')
+        return redirect('prediction_history', model_id=model.id)
+    
+    # GET requests should go to prediction history
+    return redirect('prediction_history', model_id=model.id)
 
 @login_required
 def list_models(request):

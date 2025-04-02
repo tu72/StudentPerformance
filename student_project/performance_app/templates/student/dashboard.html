@@ -13,19 +13,25 @@
                     <p class="card-text">
                         Track your academic performance, view personalized predictions, and get recommendations to improve your grades.
                     </p>
+                    <p class="card-text">
+                        <strong>Student ID:</strong> {{ user.student.student_id }}
+                    </p>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="row mb-4">
-        <div class="col-md-6 col-xl-3 mb-4">
+        <div class="col-md-6 col-xl-4 mb-4">
             <div class="card bg-primary text-white h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="me-3">
                             <div class="text-white-75">Enrolled Courses</div>
-                            <div class="display-6">{{ course_data|length }}</div>
+                            <div class="display-6">
+                                {{ course_data|length }}
+                            
+                            </div>
                         </div>
                         <i data-feather="book" class="feather-xl"></i>
                     </div>
@@ -37,13 +43,13 @@
             </div>
         </div>
         
-        <div class="col-md-6 col-xl-3 mb-4">
+        <div class="col-md-6 col-xl-4 mb-4">
             <div class="card bg-success text-white h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="me-3">
-                            <div class="text-white-75">Overall GPA</div>
-                            <div class="display-6">{{ overall_gpa|default:"N/A" }}</div>
+                            <div class="text-white-75">Overall Performance</div>
+                            <div class="display-6">{{ overall_gpa|floatformat:1|default:"N/A" }}%</div>
                         </div>
                         <i data-feather="award" class="feather-xl"></i>
                     </div>
@@ -55,37 +61,29 @@
             </div>
         </div>
         
-        <div class="col-md-6 col-xl-3 mb-4">
+        <div class="col-md-6 col-xl-4 mb-4">
             <div class="card bg-info text-white h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="me-3">
                             <div class="text-white-75">Attendance Rate</div>
-                            <div class="display-6">{{ avg_attendance|default:"N/A" }}%</div>
+                            <div class="display-6">
+                                {% for data in course_data %}
+                                    {% if data.course.code == "ATTEND1" and data.grades.0 %}
+                                        {% with grade=data.grades.0 %}
+                                            {% with percentage=grade.score|div:grade.max_score|mul:100 %}
+                                                {{ percentage|floatformat:1 }}%
+                                            {% endwith %}
+                                        {% endwith %}
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
                         </div>
                         <i data-feather="calendar" class="feather-xl"></i>
                     </div>
                 </div>
                 <div class="card-footer d-flex align-items-center justify-content-between">
                     <a class="small text-white stretched-link" href="#">View Details</a>
-                    <div class="small text-white"><i data-feather="chevron-right"></i></div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-6 col-xl-3 mb-4">
-            <div class="card bg-secondary text-white h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="me-3">
-                            <div class="text-white-75">Study Hours</div>
-                            <div class="display-6">{{ avg_study_hours|default:"0" }}</div>
-                        </div>
-                        <i data-feather="clock" class="feather-xl"></i>
-                    </div>
-                </div>
-                <div class="card-footer d-flex align-items-center justify-content-between">
-                    <a class="small text-white stretched-link" href="{% url 'input_study_habits' %}">Log Hours</a>
                     <div class="small text-white"><i data-feather="chevron-right"></i></div>
                 </div>
             </div>
@@ -144,25 +142,13 @@
                                                 <div>
                                                     <strong>{{ data.course.name }}</strong> ({{ data.course.code }})
                                                 </div>
-                                                
-                                                {% if data.prediction %}
-                                                    {% if data.prediction.predicted_grade >= 70 %}
-                                                        <span class="badge bg-success">Predicted: {{ data.prediction.predicted_grade|floatformat:1 }}%</span>
-                                                    {% elif data.prediction.predicted_grade >= 50 %}
-                                                        <span class="badge bg-warning">Predicted: {{ data.prediction.predicted_grade|floatformat:1 }}%</span>
-                                                    {% else %}
-                                                        <span class="badge bg-danger">Predicted: {{ data.prediction.predicted_grade|floatformat:1 }}%</span>
-                                                    {% endif %}
-                                                {% else %}
-                                                    <span class="badge bg-secondary">No Prediction</span>
-                                                {% endif %}
                                             </div>
                                         </button>
                                     </h2>
                                     <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="heading{{ forloop.counter }}" data-bs-parent="#coursesAccordion">
                                         <div class="accordion-body">
                                             <div class="row">
-                                                <div class="col-md-6">
+                                                <div class="col-12">
                                                     <h6>Grades</h6>
                                                     {% if data.grades %}
                                                         <div class="table-responsive">
@@ -173,7 +159,6 @@
                                                                         <th>Score</th>
                                                                         <th>Max</th>
                                                                         <th>Percentage</th>
-                                                                        <th>Date</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -193,7 +178,6 @@
                                                                                     {% endif %}
                                                                                 {% endwith %}
                                                                             </td>
-                                                                            <td>{{ grade.date }}</td>
                                                                         </tr>
                                                                     {% endfor %}
                                                                 </tbody>
@@ -202,37 +186,6 @@
                                                     {% else %}
                                                         <p class="text-muted">No grades recorded yet.</p>
                                                     {% endif %}
-                                                </div>
-                                                
-                                                <div class="col-md-6">
-                                                    <h6>Statistics</h6>
-                                                    <div class="card">
-                                                        <div class="card-body">
-                                                            <p><strong>Attendance:</strong> {{ data.attendance_rate|floatformat:1 }}%</p>
-                                                            
-                                                            {% if data.prediction %}
-                                                                <p>
-                                                                    <strong>Predicted Grade:</strong> 
-                                                                    {% if data.prediction.predicted_grade >= 70 %}
-                                                                        <span class="text-success">{{ data.prediction.predicted_grade|floatformat:1 }}%</span>
-                                                                    {% elif data.prediction.predicted_grade >= 50 %}
-                                                                        <span class="text-warning">{{ data.prediction.predicted_grade|floatformat:1 }}%</span>
-                                                                    {% else %}
-                                                                        <span class="text-danger">{{ data.prediction.predicted_grade|floatformat:1 }}%</span>
-                                                                    {% endif %}
-                                                                </p>
-                                                                <p><strong>Prediction Confidence:</strong> {{ data.prediction.confidence|mul:100|floatformat:0 }}%</p>
-                                                                
-                                                                {% if data.prediction.at_risk %}
-                                                                    <div class="alert alert-danger">
-                                                                        <strong>Warning:</strong> You're currently at risk in this course. See the recommendations for improvement strategies.
-                                                                    </div>
-                                                                {% endif %}
-                                                            {% else %}
-                                                                <p class="text-muted">No prediction available yet.</p>
-                                                            {% endif %}
-                                                        </div>
-                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -250,5 +203,138 @@
             </div>
         </div>
     </div>
+    
+    <!-- Future Courses Section -->
+    {% if future_courses %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Future Courses (Level 2)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="futureCourseAccordion">
+                        {% for data in future_courses %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="futureHeading{{ forloop.counter }}">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#futureCollapse{{ forloop.counter }}" aria-expanded="false" aria-controls="futureCollapse{{ forloop.counter }}">
+                                        <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                            <div>
+                                                <strong>{{ data.course.name }}</strong> ({{ data.course.code }})
+                                                <span class="badge bg-secondary ms-2">Level 2</span>
+                                            </div>
+                                            
+                                            {% if data.prediction %}
+                                                {% if data.prediction.predicted_grade >= 70 %}
+                                                    <span class="badge bg-success">Predicted: {{ data.prediction.predicted_grade|floatformat:1 }}%</span>
+                                                {% elif data.prediction.predicted_grade >= 50 %}
+                                                    <span class="badge bg-warning">Predicted: {{ data.prediction.predicted_grade|floatformat:1 }}%</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Predicted: {{ data.prediction.predicted_grade|floatformat:1 }}%</span>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    </button>
+                                </h2>
+                                <div id="futureCollapse{{ forloop.counter }}" class="accordion-collapse collapse" aria-labelledby="futureHeading{{ forloop.counter }}" data-bs-parent="#futureCourseAccordion">
+                                    <div class="accordion-body">
+                                        {% if data.prediction %}
+                                            <div class="row">
+                                                <div class="col-12">
+                                                    <div class="card border-{% if data.prediction.predicted_grade >= 70 %}success{% elif data.prediction.predicted_grade >= 50 %}warning{% else %}danger{% endif %} mb-3">
+                                                        <div class="card-header">Performance Prediction</div>
+                                                        <div class="card-body">
+                                                            <h5 class="card-title">{{ data.prediction.predicted_grade|floatformat:1 }}%</h5>
+                                                            <p class="card-text">
+                                                                Based on your current performance, our prediction system estimates this grade for you in {{ data.course.name }}.
+                                                                {% if data.prediction.confidence %}
+                                                                    <br>
+                                                                    <small class="text-muted">Confidence level: {{ data.prediction.confidence|floatformat:1 }}</small>
+                                                                {% endif %}
+                                                                <br>
+                                                                <small class="text-muted">Prediction made on: {{ data.prediction.created_at|date:"F j, Y" }}</small>
+                                                            </p>
+                                                            
+                                                            {% if data.prediction.predicted_grade < 60 %}
+                                                                <div class="card border-warning mt-2">
+                                                                    <div class="card-body py-2">
+                                                                        <strong>Note:</strong> This prediction indicates you might face challenges in this course. 
+                                                                        Consider strengthening your foundation in related subjects before enrollment.
+                                                                    </div>
+                                                                </div>
+                                                            {% endif %}
+
+                                                            <!-- Feature Importance and Recommendations Section -->
+                                                            {% if data.prediction.performance_data %}
+                                                                <h6 class="mt-4">Factors Influencing This Prediction</h6>
+                                                                <div class="table-responsive">
+                                                                    <table class="table table-sm">
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th>Course</th>
+                                                                                <th>Your Grade</th>
+                                                                                <th>Importance</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {% for feature in data.prediction.performance_data %}
+                                                                                <tr>
+                                                                                    <td>{{ feature.course.name }}</td>
+                                                                                    <td>
+                                                                                        {% if feature.grade is not None %}
+                                                                                            {% if feature.grade >= 70 %}
+                                                                                                <span class="text-success">{{ feature.grade|floatformat:1 }}%</span>
+                                                                                            {% elif feature.grade >= 50 %}
+                                                                                                <span class="text-warning">{{ feature.grade|floatformat:1 }}%</span>
+                                                                                            {% else %}
+                                                                                                <span class="text-danger">{{ feature.grade|floatformat:1 }}%</span>
+                                                                                            {% endif %}
+                                                                                        {% else %}
+                                                                                            <span class="text-muted">N/A</span>
+                                                                                        {% endif %}
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <div class="progress" style="height: 10px;">
+                                                                                            <div class="progress-bar bg-info" role="progressbar" style="width: {{ feature.importance }}%;" aria-valuenow="{{ feature.importance }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                                                                        </div>
+                                                                                        <small>{{ feature.importance|floatformat:1 }}%</small>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            {% endfor %}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            {% endif %}
+
+                                                            <!-- Recommendations Section -->
+                                                            {% if data.prediction.recommendations %}
+                                                                <h6 class="mt-4">Recommendations</h6>
+                                                                <div class="card border-info mb-3">
+                                                                    <div class="card-body py-2">
+                                                                        <ul class="mb-0">
+                                                                            {% for recommendation in data.prediction.recommendations %}
+                                                                                <li>{{ recommendation.text }}</li>
+                                                                            {% endfor %}
+                                                                        </ul>
+                                                                    </div>
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            <p class="text-muted">No predictions available for this course yet.</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

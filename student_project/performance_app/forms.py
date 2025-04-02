@@ -15,21 +15,12 @@ class UserRegistrationForm(UserCreationForm):
     ]
     role = forms.ChoiceField(choices=ROLE_CHOICES, widget=forms.RadioSelect)
     
-    # Only keeping the student ID field, removing department
-    id_number = forms.CharField(max_length=20, required=False, help_text='Required for students')
-    
     class Meta:
         model = User
-        fields = ['username', 'email', 'first_name', 'last_name', 'password1', 'password2', 'role', 'id_number']
+        fields = ['username', 'email', 'first_name', 'last_name', 'password1', 'password2', 'role']
     
     def clean(self):
         cleaned_data = super().clean()
-        role = cleaned_data.get('role')
-        id_number = cleaned_data.get('id_number')
-        
-        if role == 'student' and not id_number:
-            self.add_error('id_number', 'Student ID is required for student accounts.')
-        
         return cleaned_data
 
 class CourseForm(forms.ModelForm):

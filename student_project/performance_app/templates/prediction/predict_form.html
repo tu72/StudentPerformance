@@ -61,6 +61,11 @@
                     <h5 class="card-title mb-0">Prediction Form</h5>
                 </div>
                 <div class="card-body">
+                    <div class="alert alert-info">
+                        <i data-feather="info" class="me-2"></i>
+                        <strong>Note:</strong> You can only make one prediction per student per model. If a student already has a prediction, you can view it in the prediction history.
+                    </div>
+                    
                     <div class="mb-4">
                         <ul class="nav nav-tabs" id="predictionType" role="tablist">
                             <li class="nav-item" role="presentation">
@@ -89,7 +94,13 @@
                                         <select class="form-select" id="student_select" name="student_id" required>
                                             <option value="" selected disabled>Choose a student...</option>
                                             {% for student in students %}
-                                                <option value="{{ student.id }}">{{ student.name }} ({{ student.student_id }})</option>
+                                                {% if student.id in existing_prediction_students %}
+                                                    <option value="{{ student.id }}" disabled class="text-muted">
+                                                        {{ student.name }} ({{ student.student_id }}) - Prediction already exists
+                                                    </option>
+                                                {% else %}
+                                                    <option value="{{ student.id }}">{{ student.name }} ({{ student.student_id }})</option>
+                                                {% endif %}
                                             {% endfor %}
                                         </select>
                                     </div>
@@ -143,19 +154,29 @@
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox" id="select_all_students">
                                                     <label class="form-check-label" for="select_all_students">
-                                                        <strong>Select All Students</strong>
+                                                        <strong>Select All Available Students</strong>
                                                     </label>
                                                 </div>
                                             </div>
                                             <div class="card-body" style="max-height: 300px; overflow-y: auto;">
                                                 {% for student in students %}
                                                     <div class="form-check mb-2">
-                                                        <input class="form-check-input student-checkbox" type="checkbox" 
-                                                            name="student_ids" value="{{ student.id }}" 
-                                                            id="student_{{ student.id }}">
-                                                        <label class="form-check-label" for="student_{{ student.id }}">
-                                                            {{ student.name }} ({{ student.student_id }})
-                                                        </label>
+                                                        {% if student.id in existing_prediction_students %}
+                                                            <input class="form-check-input student-checkbox" type="checkbox" 
+                                                                name="student_ids" value="{{ student.id }}" 
+                                                                id="student_{{ student.id }}" disabled>
+                                                            <label class="form-check-label text-muted" for="student_{{ student.id }}">
+                                                                {{ student.name }} ({{ student.student_id }})
+                                                                <span class="badge bg-secondary">Prediction Exists</span>
+                                                            </label>
+                                                        {% else %}
+                                                            <input class="form-check-input student-checkbox" type="checkbox" 
+                                                                name="student_ids" value="{{ student.id }}" 
+                                                                id="student_{{ student.id }}">
+                                                            <label class="form-check-label" for="student_{{ student.id }}">
+                                                                {{ student.name }} ({{ student.student_id }})
+                                                            </label>
+                                                        {% endif %}
                                                     </div>
                                                 {% endfor %}
                                             </div>
@@ -210,7 +231,7 @@
         
         // Select all students checkbox functionality
         const selectAllCheckbox = document.getElementById('select_all_students');
-        const studentCheckboxes = document.querySelectorAll('.student-checkbox');
+        const studentCheckboxes = document.querySelectorAll('.student-checkbox:not([disabled])');
         
         if (selectAllCheckbox) {
             selectAllCheckbox.addEventListener('change', function() {

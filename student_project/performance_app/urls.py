@@ -52,4 +52,5 @@ urlpatterns = [
     path('prediction/<int:model_id>/make-prediction/', prediction_views.make_prediction, name='make_prediction'),
     path('prediction/<int:model_id>/prediction/<int:prediction_id>/', prediction_views.single_prediction, name='single_prediction'),
     path('prediction/<int:model_id>/history/', prediction_views.prediction_history, name='prediction_history'),
+    path('prediction/<int:model_id>/delete-predictions/', prediction_views.delete_predictions, name='delete_predictions'),
 ]

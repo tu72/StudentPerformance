@@ -17,6 +17,7 @@ from django.urls import reverse
 import csv
 import io
 from django.core.paginator import Paginator
+from .prediction_models import EnhancedPredictionModel, ModelPrediction, ModelFeature
 # Basic Views
 def home(request):
     """Home page view."""
@@ -31,13 +32,22 @@ def register(request):
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
+            role = form.cleaned_data.get('role')
+            
             user = form.save()
             # Create Student or Teacher profile based on role
-            role = form.cleaned_data.get('role')
             if role == 'student':
+                # Get the highest student ID currently in the database
+                last_student = Student.objects.all().order_by('-student_id').first()
+                next_id = 1  # Default if no students exist
+                
+                if last_student:
+                    next_id = last_student.student_id + 1
+                
                 Student.objects.create(
                     user=user,
-                    student_id=form.cleaned_data.get('id_number')
+                    student_id=next_id,
+                    name=f"{user.first_name} {user.last_name}".strip() or user.username
                 )
             elif role == 'teacher':
                 Teacher.objects.create(user=user)
@@ -143,8 +153,8 @@ def course_detail(request, course_id):
     # Get grades
     student_grades = StudentGrade.objects.filter(course=course)
     
-    # Get prediction models
-    prediction_models = PredictionModel.objects.filter(course=course)
+    # Get prediction models - updated to use EnhancedPredictionModel
+    prediction_models = EnhancedPredictionModel.objects.filter(target_course=course)
     
     # Calculate at-risk count - only for students at the same level as the course
     at_risk_grades = [g.grade for g in student_grades if g.grade is not None and g.grade < 60 and g.student.level == course.level]
@@ -634,25 +644,156 @@ def student_dashboard(request):
     student = request.user.student
     courses = student.courses.all()
     
+    # Calculate overall GPA and attendance rate
+    all_grades = StudentGrade.objects.filter(student=student)
+    grades_with_value = [g.grade for g in all_grades if g.grade is not None]
+    overall_gpa = sum(grades_with_value) / len(grades_with_value) if grades_with_value else 0
+    avg_attendance = 85  # Placeholder - implement actual attendance calculation
+    avg_study_hours = 12  # Placeholder - implement actual study hours tracking
+    
     course_data = []
     for course in courses:
+        # Get grades for this course
         try:
-            grade = StudentGrade.objects.get(student=student, course=course)
-            grade_value = grade.grade
+            grade_obj = StudentGrade.objects.get(student=student, course=course)
+            grade_value = grade_obj.grade
+            
+            # Structure for template that expects a grades list even though we only have a single grade
+            grades = [{
+                'get_grade_type_display': 'Final',  # Placeholder grade type
+                'score': grade_value,
+                'max_score': 100,
+                'date': '-'  # Placeholder date
+            }] if grade_value is not None else []
+            
         except StudentGrade.DoesNotExist:
             grade_value = None
+            grades = []
         
+        # Add course data with structured grades for template
         course_data.append({
             'course': course,
             'grade': grade_value,
+            'grades': grades,
+            'attendance_rate': avg_attendance,  # Placeholder
         })
+    
+    # Get future courses (level 2 courses that the student is not enrolled in)
+    future_courses = []
+    if student.level == 1:  # Only show future courses for level 1 students
+        # Get all level 2 courses
+        level_2_courses = Course.objects.filter(level=2)
+        # Filter out courses the student is already enrolled in
+        enrolled_course_ids = courses.values_list('id', flat=True)
+        future_course_objects = level_2_courses.exclude(id__in=enrolled_course_ids)
+        
+        # Create data structure for future courses
+        for course in future_course_objects:
+            # Get prediction data for this course if available
+            prediction_data = None
+            # Find any models that predict this course
+            prediction_models = EnhancedPredictionModel.objects.filter(target_course=course)
+            
+            if prediction_models.exists():
+                # Check if there are any predictions for this student with any of these models
+                prediction = ModelPrediction.objects.filter(
+                    model__in=prediction_models,
+                    student=student
+                ).order_by('-created_at').first()
+                
+                if prediction:
+                    # Get feature importances for this prediction model
+                    features = ModelFeature.objects.filter(
+                        model=prediction.model
+                    ).select_related('course').order_by('-importance')
+                    
+                    # Get current student performance in these courses
+                    performance_data = []
+                    recommendations = []
+                    
+                    if features.exists():
+                        # Get top 3 most important features
+                        top_features = features[:3]
+                        
+                        for feature in top_features:
+                            # Only include features with importance values
+                            if feature.importance is not None:
+                                # Find student grade in this course
+                                try:
+                                    grade = StudentGrade.objects.get(student=student, course=feature.course)
+                                    grade_value = grade.grade
+                                except StudentGrade.DoesNotExist:
+                                    grade_value = None
+                                
+                                # Add to performance data
+                                performance_data.append({
+                                    'course': feature.course,
+                                    'importance': feature.importance,
+                                    'grade': grade_value
+                                })
+                                
+                                # Generate recommendation based on importance and grade
+                                if grade_value is not None:
+                                    if grade_value < 70 and feature.importance > 10:
+                                        recommendations.append({
+                                            'course': feature.course,
+                                            'text': f"Improve your performance in {feature.course.name} as it's a critical foundation for success in {course.name}.",
+                                            'importance': feature.importance
+                                        })
+                                    elif 70 <= grade_value < 85 and feature.importance > 15:
+                                        recommendations.append({
+                                            'course': feature.course,
+                                            'text': f"Continue strengthening your skills in {feature.course.name} to excel in {course.name}.",
+                                            'importance': feature.importance
+                                        })
+                                else:
+                                    # Missing grade but important feature
+                                    if feature.importance > 20:
+                                        recommendations.append({
+                                            'course': feature.course,
+                                            'text': f"Complete {feature.course.name} with a strong grade as it's extremely important for {course.name}.",
+                                            'importance': feature.importance
+                                        })
+                        
+                        # Add a fallback recommendation if none were generated
+                        if not recommendations and prediction.predicted_grade >= 70:
+                            recommendations.append({
+                                'course': None,
+                                'text': f"You're on track for success in {course.name}. Continue your consistent performance in your current courses.",
+                                'importance': None
+                            })
+                        elif not recommendations:
+                            recommendations.append({
+                                'course': None,
+                                'text': f"Focus on building strong foundations in your current courses to improve your readiness for {course.name}.",
+                                'importance': None
+                            })
+                    
+                    prediction_data = {
+                        'predicted_grade': prediction.predicted_grade,
+                        'confidence': prediction.confidence,
+                        'created_at': prediction.created_at,
+                        'model': prediction.model,
+                        'performance_data': performance_data,
+                        'recommendations': recommendations
+                    }
+            
+            future_courses.append({
+                'course': course,
+                'is_future': True,
+                'prediction': prediction_data
+            })
     
     context = {
         'student': student,
-        'course_data': course_data
+        'course_data': course_data,
+        'future_courses': future_courses,
+        'overall_gpa': overall_gpa,
+        'avg_attendance': avg_attendance,
+        'avg_study_hours': avg_study_hours
     }
     
-    return render(request, 'student/student_dashboard.html', context)
+    return render(request, 'student/dashboard.html', context)
 
 @login_required
 def create_attendance_courses_view(request):

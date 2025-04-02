@@ -51,6 +51,23 @@ class ModelTrainingData(models.Model):
     class Meta:
         unique_together = ('model', 'student')
 
+class ModelTestPrediction(models.Model):
+    """Stores test set prediction results during model training for evaluation purposes"""
+    model = models.ForeignKey(EnhancedPredictionModel, on_delete=models.CASCADE, related_name='test_predictions')
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, null=True, blank=True)  # Optional link to student
+    actual_grade = models.FloatField()
+    predicted_grade = models.FloatField()
+    absolute_error = models.FloatField()  # |actual - predicted|
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        if self.student:
+            return f"Test prediction for {self.student.name} in {self.model.target_course.code}"
+        return f"Test prediction for {self.model.target_course.code}"
+    
+    class Meta:
+        ordering = ['-created_at']
+
 class ModelPrediction(models.Model):
     model = models.ForeignKey(EnhancedPredictionModel, on_delete=models.CASCADE, related_name='predictions')
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
@@ -60,4 +77,8 @@ class ModelPrediction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return f"Prediction for {self.student.name} in {self.model.target_course.code}" 
+        return f"Prediction for {self.student.name} in {self.model.target_course.code}"
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('model', 'student')  # Ensure only one prediction per student per model 

@@ -54,6 +54,12 @@
                                 Student Grades
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'prediction_models' %}">
+                                <span data-feather="cpu"></span>
+                                Prediction Models
+                            </a>
+                        </li>
                         
                         {% elif user.student %}
                             <!-- Student navigation items -->
@@ -61,12 +67,6 @@
                                 <a class="nav-link" href="{% url 'student_dashboard' %}">
                                     <span data-feather="book"></span>
                                     My Courses
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'input_study_habits' %}">
-                                    <span data-feather="clock"></span>
-                                    Log Study Time
                                 </a>
                             </li>
                         {% else %}
