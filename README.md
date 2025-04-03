@@ -40,7 +40,7 @@ The application includes an advanced machine learning system for creating custom
 - **Framework**: Django 4.2
 - **Machine Learning**: scikit-learn
 - **Supported Algorithms**:
-  - Linear Regression
-  - Gradient Boosting
+  - Elastic Net
+  - Gradient Boosting Regressor
   - Random Forest
-  - Support Vector Regression 
+  - Decision Tree 
